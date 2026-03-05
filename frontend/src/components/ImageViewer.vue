@@ -13,6 +13,11 @@
           {{ fileName(current?.path || "") }}
         </div>
         <div class="viewer-count">{{ index + 1 }} / {{ results.length }}</div>
+        <template v-if="pageCount > 1">
+          <button class="viewer-btn" @click="prevPage" :disabled="currentPage <= 0" aria-label="Previous page">Page ‹</button>
+          <div class="viewer-count">{{ currentPage + 1 }} / {{ pageCount }}</div>
+          <button class="viewer-btn" @click="nextPage" :disabled="currentPage >= pageCount - 1" aria-label="Next page">Page ›</button>
+        </template>
         <button class="viewer-btn" @click="copyLink" aria-label="Copy link">Copy link</button>
         <button class="viewer-btn" @click="downloadCurrent" aria-label="Download">Download</button>
         <button v-if="canEditTags" class="viewer-btn" @click="rotateLeft" aria-label="Rotate counterclockwise">↺</button>
@@ -149,7 +154,9 @@ export default {
       mediaError: "",
       pendingQuarterTurns: 0,
       rotateVersion: 0,
-      rotateSaving: false
+      rotateSaving: false,
+      currentPage: 0,
+      pageCount: 1
     };
   },
   computed: {
@@ -185,6 +192,9 @@ export default {
         this.$nextTick(() => {
           this.mediaError = "";
           this.setIndexFromId();
+          this.currentPage = 0;
+          this.pageCount = 1;
+          this.fetchCurrentPreviewMeta();
           this.preloadNeighbors();
           this.fetchCurrentTags();
           this.focusFirst();
@@ -204,6 +214,9 @@ export default {
       if (this.isOpen) {
         this.mediaError = "";
         this.setIndexFromId();
+        this.currentPage = 0;
+        this.pageCount = 1;
+        this.fetchCurrentPreviewMeta();
         this.preloadNeighbors();
         this.fetchCurrentTags();
       }
@@ -212,6 +225,9 @@ export default {
       if (this.isOpen) {
         this.mediaError = "";
         this.setIndexFromId();
+        this.currentPage = 0;
+        this.pageCount = 1;
+        this.fetchCurrentPreviewMeta();
         this.preloadNeighbors();
         this.fetchCurrentTags();
       }
@@ -219,6 +235,9 @@ export default {
     index() {
       this.pendingQuarterTurns = 0;
       this.rotateVersion = 0;
+      this.currentPage = 0;
+      this.pageCount = 1;
+      this.fetchCurrentPreviewMeta();
       this.preloadNeighbors();
       this.fetchCurrentTags();
     }
@@ -273,7 +292,7 @@ export default {
       if (!this.current) return "";
       const baseRaw = this.fileUrl(this.current.id);
       const base = this.needsRasterPreview(this.current)
-        ? `${baseRaw}${baseRaw.includes("?") ? "&" : "?"}preview=1`
+        ? `${baseRaw}${baseRaw.includes("?") ? "&" : "?"}preview=1&page=${this.currentPage}`
         : baseRaw;
       if (!this.rotateVersion) {
         return base;
@@ -294,6 +313,44 @@ export default {
         return "";
       }
       return value.slice(dot + 1).toLowerCase();
+    },
+    prevPage() {
+      if (this.currentPage <= 0) {
+        return;
+      }
+      this.currentPage -= 1;
+      this.mediaError = "";
+    },
+    nextPage() {
+      if (this.currentPage >= this.pageCount - 1) {
+        return;
+      }
+      this.currentPage += 1;
+      this.mediaError = "";
+    },
+    async fetchCurrentPreviewMeta() {
+      if (!this.current || this.current.type !== "image" || !this.needsRasterPreview(this.current)) {
+        this.pageCount = 1;
+        this.currentPage = 0;
+        return;
+      }
+      try {
+        const res = await fetch(`/api/file/meta?id=${this.current.id}`);
+        if (!res.ok) {
+          this.pageCount = 1;
+          this.currentPage = 0;
+          return;
+        }
+        const data = await res.json();
+        const count = Math.max(1, Number(data && data.pages ? data.pages : 1));
+        this.pageCount = count;
+        if (this.currentPage > count - 1) {
+          this.currentPage = 0;
+        }
+      } catch (_e) {
+        this.pageCount = 1;
+        this.currentPage = 0;
+      }
     },
     rotateLeft() {
       this.pendingQuarterTurns -= 1;
@@ -403,7 +460,7 @@ This is reversible from Admin -> Trash.`);
         const img = new Image();
         const baseRaw = this.fileUrl(id);
         const base = this.needsRasterPreview(row)
-          ? `${baseRaw}${baseRaw.includes("?") ? "&" : "?"}preview=1`
+          ? `${baseRaw}${baseRaw.includes("?") ? "&" : "?"}preview=1&page=0`
           : baseRaw;
         img.src = base;
       });

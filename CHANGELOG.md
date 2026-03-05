@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.5.7 - 2026-03-05
+- Multi-page TIFF/HEIC runtime handling added in viewer with per-page preview caching.
+
 ## 1.5.6 - 2026-03-05
 - Version bump only.
 

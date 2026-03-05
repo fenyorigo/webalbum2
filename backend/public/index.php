@@ -299,6 +299,11 @@ if ($method === "GET" && $path === "/api/file") {
     (new FileController($root . "/config/config.php"))->handle($id);
     exit;
 }
+if ($method === "GET" && $path === "/api/file/meta") {
+    $id = isset($_GET["id"]) ? (int)$_GET["id"] : 0;
+    (new FileController($root . "/config/config.php"))->metadata($id);
+    exit;
+}
 if ($method === "GET" && $path === "/api/file-tags") {
     $id = isset($_GET["id"]) ? (int)$_GET["id"] : 0;
     (new FileTagsController($root . "/config/config.php"))->handle($id);

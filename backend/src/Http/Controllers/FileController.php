@@ -72,12 +72,13 @@ final class FileController
             $mtime = (int)filemtime($path);
             $size = (int)filesize($path);
             $previewRequested = isset($_GET["preview"]) && (string)$_GET["preview"] === "1";
+            $previewPage = max(0, (int)($_GET["page"] ?? 0));
             if ($previewRequested && $this->needsPreviewRasterFallback($mime, $path)) {
                 $thumbsRoot = trim((string)($config["thumbs"]["root"] ?? ""));
                 $relPathForCache = trim((string)($row["rel_path"] ?? ""));
-                $cachePath = $this->previewCachePath($thumbsRoot, $relPathForCache);
+                $cachePath = $this->previewCachePath($thumbsRoot, $relPathForCache, $previewPage);
                 if ($cachePath !== null) {
-                    $this->ensurePreviewCached($path, $cachePath);
+                    $this->ensurePreviewCached($path, $cachePath, $previewPage);
                     clearstatcache(true, $cachePath);
                     if (is_file($cachePath)) {
                         $this->servePreviewCacheFile($cachePath, basename($path) . ".jpg");
@@ -85,9 +86,9 @@ final class FileController
                     }
                 }
 
-                $jpeg = $this->renderAsJpeg($path);
+                $jpeg = $this->renderAsJpeg($path, $previewPage);
                 if ($jpeg !== null) {
-                    $previewEtag = "\"" . md5((string)$mtime . ":" . (string)$size . ":" . $path . ":preview-jpeg-inline") . "\"";
+                    $previewEtag = "\"" . md5((string)$mtime . ":" . (string)$size . ":" . $path . ":preview-jpeg-inline:p" . (string)$previewPage) . "\"";
                     header("Content-Type: image/jpeg");
                     header("Cache-Control: private, no-cache, must-revalidate, max-age=0");
                     header("Pragma: no-cache");
@@ -119,6 +120,69 @@ final class FileController
         } catch (\Throwable $e) {
             $this->json(["error" => $e->getMessage()], 400);
         }
+    }
+
+    public function metadata(int $id): void
+    {
+        try {
+            if ($id < 1) {
+                throw new \InvalidArgumentException("Invalid id");
+            }
+
+            [$_maria, $row, $path] = $this->loadImageRowAndPath($id);
+            $mime = is_string($row["mime"]) && $row["mime"] !== "" ? $row["mime"] : $this->detectMime($path);
+            $pages = $this->previewPageCount($path);
+            $this->json([
+                "id" => $id,
+                "mime" => $mime,
+                "preview_multipage" => $this->needsPreviewRasterFallback($mime, $path),
+                "pages" => $pages,
+            ]);
+        } catch (\Throwable $e) {
+            $this->json(["error" => $e->getMessage()], 400);
+        }
+    }
+
+    private function loadImageRowAndPath(int $id): array
+    {
+        $config = require $this->configPath;
+        $maria = new Maria(
+            $config["mariadb"]["dsn"],
+            $config["mariadb"]["user"],
+            $config["mariadb"]["pass"]
+        );
+        $user = UserContext::currentUser($maria);
+        if ($user === null) {
+            throw new \RuntimeException("Not authenticated");
+        }
+        $db = new SqliteIndex($config["sqlite"]["path"]);
+
+        $rows = $db->query(
+            "SELECT id, path, rel_path, mime, type FROM files WHERE id = ?",
+            [$id]
+        );
+        if ($rows === []) {
+            throw new \RuntimeException("Not Found");
+        }
+        $row = $rows[0];
+        $relPath = trim((string)($row["rel_path"] ?? ""));
+        if ($relPath !== "" && $this->isRelPathTrashed($maria, $relPath)) {
+            throw new \RuntimeException("Trashed");
+        }
+        if (($row["type"] ?? "") !== "image") {
+            throw new \RuntimeException("Only images are supported");
+        }
+
+        $path = $this->resolveOriginalPath(
+            (string)($row["path"] ?? ""),
+            (string)($row["rel_path"] ?? ""),
+            (string)($config["photos"]["root"] ?? "")
+        );
+        if ($path === null || !is_file($path)) {
+            throw new \RuntimeException("File not found");
+        }
+
+        return [$maria, $row, $path, $config];
     }
 
     private function resolveOriginalPath(string $path, string $relPath, string $photosRoot): ?string
@@ -177,14 +241,14 @@ final class FileController
         return $ext === "tif" || $ext === "tiff" || $ext === "heic" || $ext === "heif";
     }
 
-    private function renderAsJpeg(string $path): ?string
+    private function renderAsJpeg(string $path, int $page = 0): ?string
     {
         if (!class_exists(\Imagick::class)) {
             return null;
         }
         try {
             $img = new \Imagick();
-            $img->readImage($path . "[0]");
+            $img->readImage($path . "[" . max(0, $page) . "]");
             $img->setImageOrientation(\Imagick::ORIENTATION_TOPLEFT);
             if (method_exists($img, "autoOrient")) {
                 $img->autoOrient();
@@ -203,7 +267,7 @@ final class FileController
         }
     }
 
-    private function previewCachePath(string $thumbsRoot, string $relPath): ?string
+    private function previewCachePath(string $thumbsRoot, string $relPath, int $page = 0): ?string
     {
         if ($thumbsRoot === "" || $relPath === "") {
             return null;
@@ -223,10 +287,11 @@ final class FileController
         if (!isset($info["dirname"], $info["filename"])) {
             return null;
         }
-        return (string)$info["dirname"] . DIRECTORY_SEPARATOR . (string)$info["filename"] . ".preview.jpg";
+        $safePage = max(0, $page);
+        return (string)$info["dirname"] . DIRECTORY_SEPARATOR . (string)$info["filename"] . ".p" . (string)$safePage . ".preview.jpg";
     }
 
-    private function ensurePreviewCached(string $sourcePath, string $cachePath): void
+    private function ensurePreviewCached(string $sourcePath, string $cachePath, int $page = 0): void
     {
         clearstatcache(true, $sourcePath);
         clearstatcache(true, $cachePath);
@@ -241,7 +306,7 @@ final class FileController
             return;
         }
 
-        $jpeg = $this->renderAsJpeg($sourcePath);
+        $jpeg = $this->renderAsJpeg($sourcePath, $page);
         if ($jpeg === null || $jpeg === "") {
             return;
         }
@@ -282,6 +347,23 @@ final class FileController
         header("Content-Length: " . (string)$size);
         header("Content-Disposition: inline; filename=\"" . $downloadName . "\"");
         readfile($cachePath);
+    }
+
+    private function previewPageCount(string $path): int
+    {
+        if (!class_exists(\Imagick::class)) {
+            return 1;
+        }
+        try {
+            $img = new \Imagick();
+            $img->pingImage($path);
+            $count = $img->getNumberImages();
+            $img->clear();
+            $img->destroy();
+            return max(1, (int)$count);
+        } catch (\Throwable $e) {
+            return 1;
+        }
     }
 
     private function isRelPathTrashed(Maria $maria, string $relPath): bool
