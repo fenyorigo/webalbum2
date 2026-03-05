@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.5.6 - 2026-03-05
+- Version bump only.
+
 ## 1.5.5 - 2026-02-23
 - Fixed image rotate persistence path end-to-end: added rotate route wiring in backend router and ensured requests hit authenticated rotate controller.
 - Hardened media rotation result consistency by normalizing image EXIF orientation after rotate and clearing video rotate metadata.

@@ -271,11 +271,29 @@ export default {
     },
     currentImageSrc() {
       if (!this.current) return "";
-      const base = this.fileUrl(this.current.id);
+      const baseRaw = this.fileUrl(this.current.id);
+      const base = this.needsRasterPreview(this.current)
+        ? `${baseRaw}${baseRaw.includes("?") ? "&" : "?"}preview=1`
+        : baseRaw;
       if (!this.rotateVersion) {
         return base;
       }
       return `${base}${base.includes("?") ? "&" : "?"}v=${this.rotateVersion}`;
+    },
+    needsRasterPreview(row) {
+      if (!row || row.type !== "image") {
+        return false;
+      }
+      const ext = this.fileExt(row.path || "");
+      return ext === "tif" || ext === "tiff" || ext === "heic" || ext === "heif";
+    },
+    fileExt(path) {
+      const value = String(path || "");
+      const dot = value.lastIndexOf(".");
+      if (dot < 0 || dot === value.length - 1) {
+        return "";
+      }
+      return value.slice(dot + 1).toLowerCase();
     },
     rotateLeft() {
       this.pendingQuarterTurns -= 1;
@@ -381,8 +399,13 @@ This is reversible from Admin -> Trash.`);
       if (this.results[this.index - 1]) ids.push(this.results[this.index - 1].id);
       if (this.results[this.index + 1]) ids.push(this.results[this.index + 1].id);
       ids.forEach((id) => {
+        const row = this.results.find((item) => item && item.id === id) || null;
         const img = new Image();
-        img.src = this.fileUrl(id);
+        const baseRaw = this.fileUrl(id);
+        const base = this.needsRasterPreview(row)
+          ? `${baseRaw}${baseRaw.includes("?") ? "&" : "?"}preview=1`
+          : baseRaw;
+        img.src = base;
       });
     },
     async fetchCurrentTags() {
