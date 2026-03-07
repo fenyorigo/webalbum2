@@ -76,6 +76,7 @@
         :current-user="currentUser"
         @close="closeViewer"
         @trashed="onItemTrashed"
+        @open-object="openObjectPage"
       />
       <video-viewer
         :results="results.filter((r) => r.type === 'video')"
@@ -85,6 +86,7 @@
         :current-user="currentUser"
         @close="closeVideoViewer"
         @trashed="onItemTrashed"
+        @open-object="openObjectPage"
       />
       <div v-if="toast" class="toast">{{ toast }}</div>
     </section>
@@ -116,7 +118,8 @@ export default {
       viewerStartId: 0,
       videoViewerOpen: false,
       videoViewerStartId: 0,
-      currentUser: null
+      currentUser: null,
+      mediaCacheBust: {}
     };
   },
   computed: {
@@ -133,9 +136,11 @@ export default {
     this.currentUser = window.__wa_current_user || null;
     this.fetchFavorites();
     window.addEventListener("wa-prefs-changed", this.onPrefsChanged);
+    window.addEventListener("wa-media-thumb-refresh", this.onMediaThumbRefresh);
   },
   beforeUnmount() {
     window.removeEventListener("wa-prefs-changed", this.onPrefsChanged);
+    window.removeEventListener("wa-media-thumb-refresh", this.onMediaThumbRefresh);
   },
   watch: {
     sort() {
@@ -198,8 +203,19 @@ export default {
       return `${window.location.origin}/api/video?id=${id}`;
     },
     thumbUrl(rowOrId) {
-      const id = typeof rowOrId === "object" && rowOrId !== null ? rowOrId.id : rowOrId;
-      return `${window.location.origin}/api/thumb?id=${id}`;
+      const row = typeof rowOrId === "object" && rowOrId !== null
+        ? rowOrId
+        : this.results.find((r) => r.id === rowOrId);
+      const id = row ? row.id : rowOrId;
+      const base = `${window.location.origin}/api/thumb?id=${id}`;
+      if (!row || row.type !== "video") {
+        return base;
+      }
+      const bust = this.mediaCacheBust[id];
+      if (!bust) {
+        return base;
+      }
+      return `${base}&v=${bust}`;
     },
     formatTs(ts) {
       const d = new Date(ts * 1000);
@@ -301,6 +317,25 @@ This is reversible from Admin -> Trash.`);
     closeVideoViewer() {
       this.videoViewerOpen = false;
     },
+    onMediaThumbRefresh(event) {
+      const stamp = Number(event && event.detail && event.detail.at ? event.detail.at : Date.now());
+      const next = { ...this.mediaCacheBust };
+      for (const row of this.results) {
+        if (row && row.type === "video" && row.id) {
+          next[row.id] = stamp;
+        }
+      }
+      this.mediaCacheBust = next;
+    },
+    openObjectPage(row) {
+      if (!row || !row.id) {
+        this.showToast("Object reference missing");
+        return;
+      }
+      this.viewerOpen = false;
+      this.videoViewerOpen = false;
+      this.$router.push({ path: "/object", query: { file_id: String(row.id) } });
+    },
     handleAuthError(res) {
       if (res.status === 401 || res.status === 403) {
         window.dispatchEvent(new CustomEvent("wa-auth-changed", { detail: null }));
@@ -308,6 +343,12 @@ This is reversible from Admin -> Trash.`);
         return true;
       }
       return false;
+    },
+    async onItemTrashed() {
+      this.viewerOpen = false;
+      this.videoViewerOpen = false;
+      this.showToast("Moved to Trash");
+      await this.fetchFavorites();
     }
   }
 };

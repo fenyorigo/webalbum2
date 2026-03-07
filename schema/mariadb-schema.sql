@@ -1,2 +1,4 @@
--- Placeholder MariaDB schema for users + saved_queries + query_runs
--- Define tables when backend persistence is added.
+-- Placeholder MariaDB schema entrypoint.
+-- Apply backend/sql/mysql/*.sql in numeric order.
+-- v2 foundation tables are introduced in:
+--   014_objects_foundation.sql

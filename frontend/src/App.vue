@@ -3,7 +3,7 @@
     <nav class="top">
       <div class="brand">
         Family memories
-        <span class="version">v1.5.7</span>
+        <span class="version">v2.0.0</span>
       </div>
       <div class="links" v-if="currentUser">
         <router-link to="/" class="link" active-class="active" exact-active-class="active">Search</router-link>
@@ -11,9 +11,14 @@
         <router-link to="/favorites" class="link" active-class="active">My Favorites</router-link>
         <router-link to="/saved-searches" class="link" active-class="active">Saved searches</router-link>
         <router-link to="/profile" class="link" active-class="active">My Profile</router-link>
+        <router-link to="/my-proposals" class="link" active-class="active">My Proposals</router-link>
+        <router-link to="/my-notes" class="link" active-class="active">My Notes</router-link>
         <div v-if="currentUser.is_admin" class="admin-menu">
           <button class="link admin-toggle" type="button" @click="toggleAdmin">
             Admin ▾
+            <span v-if="activeObjectJobs > 0" class="mini-badge" :title="`${activeObjectJobs} active object transform jobs`">
+              {{ activeObjectJobs }}
+            </span>
           </button>
           <div v-if="adminOpen" class="admin-dropdown">
             <button type="button" @click="openTagsAdmin">Tags</button>
@@ -21,6 +26,7 @@
             <button type="button" @click="openLogs">View logs</button>
             <button type="button" @click="openTrash">Trash</button>
             <button type="button" @click="openAssetsPage">Assets</button>
+            <button type="button" @click="openObjectProposals">Object proposals</button>
             <button type="button" @click="scanAssets">Scan documents and audio</button>
             <button type="button" @click="openJobStatus">Job status</button>
             <button type="button" @click="openRequiredTools">Required tools</button>
@@ -636,7 +642,10 @@ export default {
       scanItems: [],
       scanTab: "pending",
       scanClearedIds: [],
-      scanTimer: null
+      scanTimer: null,
+      objectJobCounts: { queued: 0, running: 0, done: 0, error: 0, cancelled: 0 },
+      objectJobsTimer: null,
+      objectJobsLastActiveTotal: 0
     };
   },
   mounted() {
@@ -648,6 +657,7 @@ export default {
     window.removeEventListener("wa-auth-changed", this.onAuthChanged);
     window.removeEventListener("wa-prefs-refresh", this.loadPrefs);
     this.stopScanRefresh();
+    this.stopObjectJobsPolling();
   },
   computed: {
     forceChangeRequired() {
@@ -750,6 +760,9 @@ export default {
         const status = this.overallScanStatus(row);
         return status === "ready" || status === "no_processing";
       }).length;
+    },
+    activeObjectJobs() {
+      return Number(this.objectJobCounts.queued || 0) + Number(this.objectJobCounts.running || 0);
     }
   },
   methods: {
@@ -766,6 +779,8 @@ export default {
         window.__wa_current_user = this.currentUser;
         if (this.currentUser) {
           await this.loadPrefs();
+          await this.loadObjectJobStatus();
+          this.startObjectJobsPolling();
           if (this.currentUser.is_admin) {
             await this.loadToolStatus();
           }
@@ -793,6 +808,8 @@ export default {
       window.__wa_current_user = this.currentUser;
       if (this.currentUser) {
         this.loadPrefs();
+        this.loadObjectJobStatus();
+        this.startObjectJobsPolling();
         if (this.currentUser.is_admin) {
           this.loadToolStatus();
         } else {
@@ -803,7 +820,63 @@ export default {
         this.prefs = null;
         this.toolStatus = null;
         this.toolStatusLoaded = false;
+        this.stopObjectJobsPolling();
+        this.objectJobCounts = { queued: 0, running: 0, done: 0, error: 0, cancelled: 0 };
+        this.objectJobsLastActiveTotal = 0;
         window.__wa_prefs = null;
+      }
+    },
+    startObjectJobsPolling() {
+      if (!this.currentUser) {
+        this.stopObjectJobsPolling();
+        return;
+      }
+      if (this.objectJobsTimer) {
+        return;
+      }
+      this.objectJobsTimer = window.setInterval(() => {
+        if (!this.currentUser) {
+          this.stopObjectJobsPolling();
+          return;
+        }
+        this.loadObjectJobStatus(true);
+      }, 20000);
+    },
+    stopObjectJobsPolling() {
+      if (this.objectJobsTimer) {
+        clearInterval(this.objectJobsTimer);
+        this.objectJobsTimer = null;
+      }
+    },
+    async loadObjectJobStatus(silent = false) {
+      if (!this.currentUser) {
+        return;
+      }
+      try {
+        const res = await fetch("/api/objects/jobs/active-summary");
+        if (res.status === 401 || res.status === 403) {
+          if (!silent) {
+            this.onAuthChanged({ detail: null });
+            this.$router.push("/login");
+          }
+          return;
+        }
+        if (!res.ok) {
+          return;
+        }
+        const data = await res.json();
+        const counts = data && typeof data.counts === "object"
+          ? { queued: 0, running: 0, ...data.counts }
+          : { queued: 0, running: 0 };
+        const nextActive = Number(data && data.active_total ? data.active_total : (Number(counts.queued) + Number(counts.running)));
+        const prevActive = Number(this.objectJobsLastActiveTotal || 0);
+        this.objectJobCounts = { queued: Number(counts.queued || 0), running: Number(counts.running || 0), done: 0, error: 0, cancelled: 0 };
+        this.objectJobsLastActiveTotal = nextActive;
+        if (prevActive > 0 && nextActive === 0) {
+          window.dispatchEvent(new CustomEvent("wa-media-thumb-refresh", { detail: { at: Date.now(), reason: "object_jobs_drained" } }));
+        }
+      } catch (_err) {
+        // ignore badge polling errors
       }
     },
     toggleAdmin() {
@@ -965,6 +1038,10 @@ export default {
     openAssetsPage() {
       this.adminOpen = false;
       this.$router.push("/assets");
+    },
+    openObjectProposals() {
+      this.adminOpen = false;
+      this.$router.push("/admin/object-proposals");
     },
     scanAssets() {
       this.adminOpen = false;
@@ -2799,6 +2876,21 @@ button:disabled {
   border: none;
   padding: 0;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mini-badge {
+  display: inline-block;
+  min-width: 16px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #ffffff;
+  background: #c13b1b;
+  border: 1px solid #8f2c14;
 }
 
 .admin-dropdown {

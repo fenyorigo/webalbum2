@@ -57,13 +57,14 @@ final class MediaRotateController
             }
 
             $sqlite = new SqliteIndex($config['sqlite']['path']);
-            $rows = $sqlite->query('SELECT id, path, rel_path, type FROM files WHERE id = ?', [$id]);
+            $rows = $sqlite->query('SELECT id, path, rel_path, type, sha256 FROM files WHERE id = ?', [$id]);
             if ($rows === []) {
                 $this->json(['error' => 'Not Found'], 404);
                 return;
             }
             $row = $rows[0];
             $type = (string)($row['type'] ?? '');
+            $oldSha = strtolower(trim((string)($row['sha256'] ?? '')));
             if ($type !== 'image' && $type !== 'video') {
                 $this->json(['error' => 'Only image and video are supported'], 400);
                 return;
@@ -136,6 +137,8 @@ final class MediaRotateController
                 }
             }
 
+            $hashSync = $this->syncHashesAfterRotate($maria, $config, $relPath, $oldSha, $path);
+
             $this->logRotate([
                 'file_id' => $id,
                 'type' => $type,
@@ -148,6 +151,8 @@ final class MediaRotateController
                 'orientation_fix_attempted' => (bool)$orientationFix['attempted'],
                 'orientation_fix_ok' => (bool)$orientationFix['ok'],
                 'orientation_fix_error' => (string)$orientationFix['error'],
+                'old_sha256' => $hashSync['old_sha256'] ?? null,
+                'new_sha256' => $hashSync['new_sha256'] ?? null,
             ]);
 
             $this->json([
@@ -159,6 +164,8 @@ final class MediaRotateController
                 'after_mtime' => $afterMtime,
                 'orientation_fix_attempted' => (bool)$orientationFix['attempted'],
                 'orientation_fix_ok' => (bool)$orientationFix['ok'],
+                'old_sha256' => $hashSync['old_sha256'] ?? null,
+                'new_sha256' => $hashSync['new_sha256'] ?? null,
             ]);
         } catch (\Throwable $e) {
             $this->json(['error' => $e->getMessage()], 500);
@@ -379,6 +386,110 @@ final class MediaRotateController
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($payload);
+    }
+
+    private function syncHashesAfterRotate(Maria $maria, array $config, string $relPath, string $oldSha, string $filePath): array
+    {
+        $newSha = strtolower((string)@hash_file('sha256', $filePath));
+        if (!preg_match('/^[a-f0-9]{64}$/', $newSha)) {
+            throw new \RuntimeException('Failed to compute sha256 after rotate');
+        }
+
+        $stat = @stat($filePath);
+        $size = is_array($stat) ? (int)($stat['size'] ?? 0) : 0;
+        $mtime = is_array($stat) ? (int)($stat['mtime'] ?? 0) : 0;
+
+        $sqlitePath = (string)($config['sqlite']['path'] ?? '');
+        if ($sqlitePath === '' || !is_file($sqlitePath)) {
+            throw new \RuntimeException('SQLite DB not available for hash sync');
+        }
+        $sqlite = new \PDO(
+            'sqlite:' . $sqlitePath,
+            null,
+            null,
+            [
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+            ]
+        );
+        $sqlite->beginTransaction();
+        try {
+            $st = $sqlite->prepare(
+                "UPDATE files
+                 SET sha256 = ?, size = ?, mtime = ?, indexed_at = datetime('now')
+                 WHERE rel_path = ?
+                   AND type IN ('image','video')"
+            );
+            $st->execute([$newSha, max(0, $size), max(0, $mtime), $relPath]);
+            $sqlite->commit();
+        } catch (\Throwable $e) {
+            if ($sqlite->inTransaction()) {
+                $sqlite->rollBack();
+            }
+            throw $e;
+        }
+
+        $maria->exec("START TRANSACTION");
+        try {
+            $maria->exec(
+                "INSERT INTO wa_objects (sha256, status, first_seen_at, last_seen_at, orphaned_at, last_synced_at)
+                 VALUES (?, 'active', NOW(), NOW(), NULL, NOW())
+                 ON DUPLICATE KEY UPDATE
+                   status = 'active',
+                   orphaned_at = NULL,
+                   last_seen_at = NOW(),
+                   last_synced_at = NOW()",
+                [$newSha]
+            );
+
+            if (preg_match('/^[a-f0-9]{64}$/', $oldSha) && $oldSha !== $newSha) {
+                $rem = $sqlite->prepare(
+                    "SELECT COUNT(*) AS c
+                     FROM files
+                     WHERE sha256 IS NOT NULL
+                       AND LOWER(sha256) = ?"
+                );
+                $rem->execute([$oldSha]);
+                $remaining = (int)(($rem->fetch()['c'] ?? 0));
+                if ($remaining === 0) {
+                    $maria->exec(
+                        "UPDATE wa_objects
+                         SET status = 'orphaned',
+                             orphaned_at = IF(orphaned_at IS NULL, NOW(), orphaned_at),
+                             last_synced_at = NOW()
+                         WHERE sha256 = ?
+                           AND status = 'active'",
+                        [$oldSha]
+                    );
+                } else {
+                    $maria->exec(
+                        "UPDATE wa_objects
+                         SET status = 'active',
+                             orphaned_at = NULL,
+                             last_seen_at = NOW(),
+                             last_synced_at = NOW()
+                         WHERE sha256 = ?",
+                        [$oldSha]
+                    );
+                }
+            }
+
+            $maria->exec(
+                "UPDATE wa_assets
+                 SET sha256 = ?, size = ?, mtime = ?, updated_at = NOW()
+                 WHERE rel_path = ?",
+                [$newSha, max(0, $size), max(0, $mtime), $relPath]
+            );
+            $maria->exec("COMMIT");
+        } catch (\Throwable $e) {
+            $maria->exec("ROLLBACK");
+            throw $e;
+        }
+
+        return [
+            'old_sha256' => preg_match('/^[a-f0-9]{64}$/', $oldSha) ? $oldSha : null,
+            'new_sha256' => $newSha,
+        ];
     }
 
     private function logRotate(array $details): void

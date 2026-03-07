@@ -44,6 +44,7 @@ final class SearchController
             $isAdmin = (int)($user['is_admin'] ?? 0) === 1;
             $requestedType = $this->extractRequestedType($query['where']);
             $extFilters = $this->extractExtFilters($query['where']);
+            $hasNotes = !empty($query['has_notes']);
 
             // Extension filters apply only to MariaDB assets (docs/audio), so avoid mixed-source duplicates.
             if ($extFilters !== []) {
@@ -57,24 +58,24 @@ final class SearchController
                     return;
                 }
                 $typeFilter = ($requestedType === 'doc' || $requestedType === 'audio') ? $requestedType : null;
-                $assetResult = $this->searchAssetsOnly($maria, $sqlite, $query, $typeFilter, $extFilters);
+                $assetResult = $this->searchAssetsOnly($maria, $sqlite, $query, $typeFilter, $extFilters, $hasNotes);
                 $this->json($assetResult);
                 return;
             }
 
             if ($requestedType === 'doc' || $requestedType === 'audio') {
-                $assetResult = $this->searchAssetsOnly($maria, $sqlite, $query, $requestedType, []);
+                $assetResult = $this->searchAssetsOnly($maria, $sqlite, $query, $requestedType, [], $hasNotes);
                 $this->json($assetResult);
                 return;
             }
 
-            $mediaResult = $this->searchMedia($sqlite, $maria, $query, $userId, $isAdmin);
+            $mediaResult = $this->searchMedia($sqlite, $maria, $query, $userId, $isAdmin, $hasNotes);
             if ($requestedType === 'image' || $requestedType === 'video' || $requestedType === 'other') {
                 $this->json($mediaResult);
                 return;
             }
 
-            $assetResult = $this->searchAssetsOnly($maria, $sqlite, $query, null, []);
+            $assetResult = $this->searchAssetsOnly($maria, $sqlite, $query, null, [], $hasNotes);
             $merged = $this->mergeResultSets($mediaResult, $assetResult, $query, (string)$config['photos']['root']);
             $this->json($merged);
         } catch (\JsonException $e) {
@@ -84,7 +85,7 @@ final class SearchController
         }
     }
 
-    private function searchMedia(SqliteIndex $sqlite, Maria $maria, array $query, int $userId, bool $isAdmin): array
+    private function searchMedia(SqliteIndex $sqlite, Maria $maria, array $query, int $userId, bool $isAdmin, bool $hasNotes): array
     {
         $runner = new Runner($sqlite);
 
@@ -95,6 +96,18 @@ final class SearchController
                 [$userId]
             );
             $restrictIds = array_map(fn (array $row): int => (int)$row['file_id'], $favRows);
+        }
+        if ($hasNotes) {
+            $noteIds = $this->mediaIdsWithNotes($sqlite, $maria);
+            if ($noteIds === []) {
+                return [
+                    'items' => [],
+                    'total' => 0,
+                    'offset' => (int)$query['offset'],
+                    'limit' => (int)$query['limit'],
+                ];
+            }
+            $restrictIds = $this->intersectIdLists($restrictIds, $noteIds);
         }
 
         $excludeTags = $this->hiddenTagsForSearch($maria, $userId, $isAdmin);
@@ -141,7 +154,7 @@ final class SearchController
         ];
     }
 
-    private function searchAssetsOnly(Maria $maria, SqliteIndex $sqlite, array $query, ?string $typeFilter, array $extFilters): array
+    private function searchAssetsOnly(Maria $maria, SqliteIndex $sqlite, array $query, ?string $typeFilter, array $extFilters, bool $hasNotes): array
     {
         $limit = (int)$query['limit'];
         $offset = (int)$query['offset'];
@@ -154,6 +167,14 @@ final class SearchController
         if ($typeFilter !== null) {
             $where[] = 'a.type = ?';
             $params[] = $typeFilter;
+        }
+        if ($hasNotes) {
+            $where[] = "EXISTS (
+                SELECT 1
+                FROM wa_objects o
+                JOIN wa_object_notes n ON n.object_id = o.id
+                WHERE LOWER(o.sha256) = LOWER(a.sha256)
+            )";
         }
 
         if ($extFilters !== []) {
@@ -535,6 +556,75 @@ final class SearchController
         }
 
         return array_keys($tags);
+    }
+
+    private function mediaIdsWithNotes(SqliteIndex $sqlite, Maria $maria): array
+    {
+        $rows = $maria->query(
+            "SELECT DISTINCT LOWER(o.sha256) AS sha256
+             FROM wa_objects o
+             JOIN wa_object_notes n ON n.object_id = o.id
+             WHERE o.sha256 IS NOT NULL
+               AND CHAR_LENGTH(o.sha256) = 64"
+        );
+        $hashes = [];
+        foreach ($rows as $row) {
+            $sha = strtolower(trim((string)($row['sha256'] ?? '')));
+            if (preg_match('/^[a-f0-9]{64}$/', $sha)) {
+                $hashes[$sha] = true;
+            }
+        }
+        if ($hashes === []) {
+            return [];
+        }
+
+        $ids = [];
+        foreach (array_chunk(array_keys($hashes), 300) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            $hitRows = $sqlite->query(
+                "SELECT id
+                 FROM files
+                 WHERE sha256 IS NOT NULL
+                   AND LOWER(sha256) IN ({$placeholders})",
+                $chunk
+            );
+            foreach ($hitRows as $hit) {
+                $id = (int)($hit['id'] ?? 0);
+                if ($id > 0) {
+                    $ids[$id] = true;
+                }
+            }
+        }
+
+        return array_map('intval', array_keys($ids));
+    }
+
+    private function intersectIdLists(?array $base, array $other): array
+    {
+        if ($other === []) {
+            return [];
+        }
+        if ($base === null) {
+            return array_values(array_unique(array_map('intval', $other)));
+        }
+        if ($base === []) {
+            return [];
+        }
+        $set = [];
+        foreach ($other as $id) {
+            $v = (int)$id;
+            if ($v > 0) {
+                $set[$v] = true;
+            }
+        }
+        $out = [];
+        foreach ($base as $id) {
+            $v = (int)$id;
+            if ($v > 0 && isset($set[$v])) {
+                $out[] = $v;
+            }
+        }
+        return array_values(array_unique($out));
     }
 
     private function hasGlobalHiddenColumn(Maria $maria): bool

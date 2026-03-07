@@ -5,8 +5,10 @@ declare(strict_types=1);
 use WebAlbum\Assets\AssetPaths;
 use WebAlbum\Assets\AssetSupport;
 use WebAlbum\Assets\Jobs;
+use WebAlbum\Assets\ObjectTransformJobs;
 use WebAlbum\Db\Maria;
 use WebAlbum\SystemTools;
+use WebAlbum\Thumb\ThumbPolicy;
 
 $root = dirname(__DIR__);
 $autoload = $root . '/vendor/autoload.php';
@@ -37,10 +39,16 @@ foreach ($argv as $arg) {
 
 $workerId = gethostname() . ':' . getmypid();
 Jobs::recoverStaleLocks($db, 15);
+ObjectTransformJobs::recoverStaleLocks($db, 15);
 
 $processed = 0;
 while (true) {
     $job = Jobs::claimNext($db, $workerId);
+    $queue = 'assets';
+    if ($job === null) {
+        $job = ObjectTransformJobs::claimNext($db, $workerId);
+        $queue = 'object';
+    }
     if ($job === null) {
         // Batch mode: stop when queue is currently empty.
         if ($once || $maxJobs > 0) {
@@ -55,12 +63,21 @@ while (true) {
     $attempts = (int)$job['attempts'];
 
     try {
-        processJob($db, $config, $job);
-        Jobs::markDone($db, $jobId);
-        echo "done job #{$jobId} ({$job['job_type']})\n";
+        if ($queue === 'assets') {
+            processJob($db, $config, $job);
+            Jobs::markDone($db, $jobId);
+        } else {
+            processObjectTransformJob($db, $config, $job);
+            ObjectTransformJobs::markDone($db, $jobId);
+        }
+        echo "done {$queue} job #{$jobId} ({$job['job_type']})\n";
     } catch (Throwable $e) {
-        Jobs::markError($db, $jobId, $e->getMessage(), $attempts);
-        echo "error job #{$jobId}: {$e->getMessage()}\n";
+        if ($queue === 'assets') {
+            Jobs::markError($db, $jobId, $e->getMessage(), $attempts);
+        } else {
+            ObjectTransformJobs::markError($db, $jobId, $e->getMessage(), $attempts);
+        }
+        echo "error {$queue} job #{$jobId}: {$e->getMessage()}\n";
     }
 
     if ($once || ($maxJobs > 0 && $processed >= $maxJobs)) {
@@ -218,6 +235,426 @@ function buildDocThumb(Maria $db, array $config, int $assetId, array $asset, str
         "ON DUPLICATE KEY UPDATE path = VALUES(path), status = 'ready', error_text = NULL, updated_at = NOW()",
         [$assetId, $target]
     );
+}
+
+function processObjectTransformJob(Maria $db, array $config, array $job): void
+{
+    $jobType = (string)($job['job_type'] ?? '');
+    if ($jobType !== 'rotate') {
+        throw new RuntimeException('Unsupported object job_type: ' . $jobType);
+    }
+
+    $payload = is_array($job['payload'] ?? null) ? $job['payload'] : [];
+    $relPath = (string)($payload['rel_path'] ?? '');
+    $type = strtolower(trim((string)($payload['type'] ?? '')));
+    $turns = normalizeQuarterTurns((int)($payload['quarter_turns'] ?? 0));
+    $jobId = (int)($job['id'] ?? 0);
+
+    if ($relPath === '') {
+        throw new RuntimeException('Missing rel_path in object transform payload');
+    }
+    if ($turns === 0) {
+        throw new RuntimeException('Invalid rotation (quarter_turns=0)');
+    }
+    if ($type !== 'image' && $type !== 'video') {
+        throw new RuntimeException('Unsupported object transform media type');
+    }
+
+    $photosRoot = (string)($config['photos']['root'] ?? '');
+    $sourcePath = AssetPaths::joinInside($photosRoot, $relPath);
+    if ($sourcePath === null || !is_file($sourcePath) || !is_readable($sourcePath)) {
+        throw new RuntimeException('Source file is missing for rel_path: ' . $relPath);
+    }
+
+    $tools = SystemTools::checkExternalTools($config, true);
+    $ffmpegTool = $tools['tools']['ffmpeg'] ?? ['available' => false, 'path' => null];
+    if (!(bool)($ffmpegTool['available'] ?? false) || empty($ffmpegTool['path'])) {
+        throw new RuntimeException('ffmpeg not available');
+    }
+    $ffmpeg = (string)$ffmpegTool['path'];
+    $exiftoolTool = $tools['tools']['exiftool'] ?? ['available' => false, 'path' => null];
+
+    $tmp = tmpRotatePath($sourcePath);
+    $filter = rotationFilter($turns);
+    try {
+        runRotate($ffmpeg, $sourcePath, $tmp, $filter, $type);
+        if (!is_file($tmp) || (int)@filesize($tmp) <= 0) {
+            throw new RuntimeException('Rotation output is empty');
+        }
+        preserveOwnershipAndMode($sourcePath, $tmp);
+        if (!@rename($tmp, $sourcePath)) {
+            throw new RuntimeException('Failed to replace original file after rotation');
+        }
+    } finally {
+        if (is_file($tmp)) {
+            @unlink($tmp);
+        }
+    }
+
+    if ($type === 'image') {
+        normalizeImageOrientationTag(
+            $sourcePath,
+            (bool)($exiftoolTool['available'] ?? false),
+            is_string($exiftoolTool['path'] ?? null) ? (string)$exiftoolTool['path'] : 'exiftool'
+        );
+    }
+
+    $thumbRoot = (string)($config['thumbs']['root'] ?? '');
+    if ($thumbRoot !== '') {
+        $thumbPath = ThumbPolicy::thumbPath($thumbRoot, $relPath);
+        if (is_string($thumbPath) && is_file($thumbPath)) {
+            @unlink($thumbPath);
+        }
+    }
+
+    try {
+        refreshObjectHashesAfterTransform($db, $config, $job, $sourcePath, $relPath, $type, $jobId);
+    } catch (Throwable $e) {
+        throw new RuntimeException('NON_RETRY: hash/db sync after rotate failed: ' . $e->getMessage());
+    }
+
+    @error_log('webalbum_object_transform ' . json_encode([
+        'job_id' => (int)($job['id'] ?? 0),
+        'object_id' => (int)($job['object_id'] ?? 0),
+        'proposal_id' => isset($job['proposal_id']) ? (int)$job['proposal_id'] : null,
+        'job_type' => $jobType,
+        'rel_path' => $relPath,
+        'type' => $type,
+        'quarter_turns' => $turns,
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+}
+
+function refreshObjectHashesAfterTransform(
+    Maria $db,
+    array $config,
+    array $job,
+    string $sourcePath,
+    string $relPath,
+    string $type,
+    int $jobId
+): void {
+    $sqlitePath = (string)($config['sqlite']['path'] ?? '');
+    if ($sqlitePath === '') {
+        throw new RuntimeException('SQLite path is not configured');
+    }
+    if (!is_file($sqlitePath)) {
+        throw new RuntimeException('SQLite DB not found: ' . $sqlitePath);
+    }
+
+    $newSha = strtolower((string)@hash_file('sha256', $sourcePath));
+    if (!preg_match('/^[a-f0-9]{64}$/', $newSha)) {
+        throw new RuntimeException('Failed to compute sha256 for transformed media');
+    }
+    $stat = @stat($sourcePath);
+    $size = is_array($stat) ? (int)($stat['size'] ?? 0) : 0;
+    $mtime = is_array($stat) ? (int)($stat['mtime'] ?? 0) : 0;
+
+    $sqlite = new PDO(
+        'sqlite:' . $sqlitePath,
+        null,
+        null,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]
+    );
+
+    $oldSha = '';
+    $shaStmt = $sqlite->prepare(
+        "SELECT LOWER(sha256) AS sha256
+         FROM files
+         WHERE rel_path = ?
+           AND type IN ('image','video')
+         ORDER BY id ASC
+         LIMIT 1"
+    );
+    $shaStmt->execute([$relPath]);
+    $shaRow = $shaStmt->fetch();
+    if (is_array($shaRow) && is_string($shaRow['sha256'] ?? null)) {
+        $oldSha = strtolower(trim((string)$shaRow['sha256']));
+    }
+
+    $sqlite->beginTransaction();
+    try {
+        $upd = $sqlite->prepare(
+            "UPDATE files
+             SET sha256 = ?, size = ?, mtime = ?, indexed_at = datetime('now')
+             WHERE rel_path = ?
+               AND type IN ('image','video')"
+        );
+        $upd->execute([$newSha, max(0, $size), max(0, $mtime), $relPath]);
+        $sqlite->commit();
+    } catch (Throwable $e) {
+        if ($sqlite->inTransaction()) {
+            $sqlite->rollBack();
+        }
+        throw $e;
+    }
+
+    $oldObjectSha = '';
+    $oldObjectId = (int)($job['object_id'] ?? 0);
+    if ($oldObjectId > 0) {
+        $oldRows = $db->query("SELECT sha256 FROM wa_objects WHERE id = ? LIMIT 1", [$oldObjectId]);
+        if ($oldRows !== []) {
+            $oldObjectSha = strtolower(trim((string)($oldRows[0]['sha256'] ?? '')));
+        }
+    }
+    if (!preg_match('/^[a-f0-9]{64}$/', $oldObjectSha)) {
+        $oldObjectSha = preg_match('/^[a-f0-9]{64}$/', $oldSha) ? $oldSha : '';
+    }
+
+    $db->exec("START TRANSACTION");
+    try {
+        $db->exec(
+            "INSERT INTO wa_objects (sha256, status, first_seen_at, last_seen_at, orphaned_at, last_synced_at)
+             VALUES (?, 'active', NOW(), NOW(), NULL, NOW())
+             ON DUPLICATE KEY UPDATE
+               status = 'active',
+               orphaned_at = NULL,
+               last_seen_at = NOW(),
+               last_synced_at = NOW()",
+            [$newSha]
+        );
+        $newObjectRows = $db->query("SELECT id FROM wa_objects WHERE sha256 = ? LIMIT 1", [$newSha]);
+        $newObjectId = (int)($newObjectRows[0]['id'] ?? 0);
+        if ($newObjectId > 0 && $jobId > 0) {
+            $db->exec("UPDATE wa_object_transform_jobs SET object_id = ? WHERE id = ?", [$newObjectId, $jobId]);
+        }
+
+        if ($oldObjectSha !== '' && $oldObjectSha !== $newSha) {
+            $rem = $sqlite->prepare(
+                "SELECT COUNT(*) AS c
+                 FROM files
+                 WHERE sha256 IS NOT NULL
+                   AND LOWER(sha256) = ?"
+            );
+            $rem->execute([$oldObjectSha]);
+            $remaining = (int)(($rem->fetch()['c'] ?? 0));
+            if ($remaining === 0) {
+                $db->exec(
+                    "UPDATE wa_objects
+                     SET status = 'orphaned',
+                         orphaned_at = IF(orphaned_at IS NULL, NOW(), orphaned_at),
+                         last_synced_at = NOW()
+                     WHERE sha256 = ?
+                       AND status = 'active'",
+                    [$oldObjectSha]
+                );
+            } else {
+                $db->exec(
+                    "UPDATE wa_objects
+                     SET status = 'active',
+                         orphaned_at = NULL,
+                         last_seen_at = NOW(),
+                         last_synced_at = NOW()
+                     WHERE sha256 = ?",
+                    [$oldObjectSha]
+                );
+            }
+        }
+
+        $db->exec(
+            "UPDATE wa_assets
+             SET sha256 = ?, size = ?, mtime = ?, updated_at = NOW()
+             WHERE rel_path = ?",
+            [$newSha, max(0, $size), max(0, $mtime), $relPath]
+        );
+
+        $db->exec("COMMIT");
+    } catch (Throwable $e) {
+        $db->exec("ROLLBACK");
+        throw $e;
+    }
+
+    @error_log('webalbum_object_sha_sync ' . json_encode([
+        'job_id' => $jobId,
+        'rel_path' => $relPath,
+        'type' => $type,
+        'old_sha256' => $oldObjectSha !== '' ? $oldObjectSha : null,
+        'new_sha256' => $newSha,
+        'size' => $size,
+        'mtime' => $mtime,
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+}
+
+function normalizeQuarterTurns(int $turns): int
+{
+    $value = $turns % 4;
+    if ($value < 0) {
+        $value += 4;
+    }
+    return $value;
+}
+
+function rotationFilter(int $turns): string
+{
+    return match ($turns) {
+        1 => 'transpose=1',
+        2 => 'hflip,vflip',
+        3 => 'transpose=2',
+        default => '',
+    };
+}
+
+function runRotate(string $ffmpeg, string $src, string $dest, string $filter, string $type): void
+{
+    $args = [
+        $ffmpeg,
+        '-v', 'error',
+        '-y',
+        '-i', $src,
+        '-vf', $filter,
+    ];
+
+    if ($type === 'video') {
+        $args = array_merge($args, [
+            '-c:v', 'libx264',
+            '-preset', 'veryfast',
+            '-crf', '18',
+            '-c:a', 'copy',
+            '-movflags', '+faststart',
+            '-metadata:s:v:0', 'rotate=0',
+        ]);
+    } else {
+        $args = array_merge($args, ['-frames:v', '1', '-q:v', '2']);
+    }
+
+    $args[] = $dest;
+    $cmd = implode(' ', array_map('escapeshellarg', $args));
+    $descriptors = [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    $process = @proc_open($cmd, $descriptors, $pipes);
+    if (!is_resource($process)) {
+        throw new RuntimeException('Failed to start ffmpeg');
+    }
+
+    fclose($pipes[0]);
+    stream_set_blocking($pipes[1], false);
+    stream_set_blocking($pipes[2], false);
+
+    $stdout = '';
+    $stderr = '';
+    $start = microtime(true);
+    $timeout = ($type === 'video') ? 180 : 60;
+
+    while (true) {
+        $stdout .= (string)stream_get_contents($pipes[1]);
+        $stderr .= (string)stream_get_contents($pipes[2]);
+        $status = proc_get_status($process);
+        if (!$status['running']) {
+            break;
+        }
+        if ((microtime(true) - $start) > $timeout) {
+            proc_terminate($process, 9);
+            throw new RuntimeException('ffmpeg timeout during rotate');
+        }
+        usleep(20000);
+    }
+
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    $exit = proc_close($process);
+
+    if ($exit !== 0) {
+        $msg = trim($stderr !== '' ? $stderr : $stdout);
+        if ($msg === '') {
+            $msg = 'ffmpeg rotate failed';
+        }
+        throw new RuntimeException($msg);
+    }
+}
+
+function normalizeImageOrientationTag(string $path, bool $available, string $binary): array
+{
+    if (!$available) {
+        return [
+            'attempted' => false,
+            'ok' => false,
+            'error' => 'exiftool unavailable',
+        ];
+    }
+
+    $cmd = implode(' ', array_map('escapeshellarg', [
+        $binary !== '' ? $binary : 'exiftool',
+        '-overwrite_original',
+        '-P',
+        '-n',
+        '-Orientation#=1',
+        $path,
+    ]));
+
+    $descriptors = [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    $process = @proc_open($cmd, $descriptors, $pipes);
+    if (!is_resource($process)) {
+        return [
+            'attempted' => true,
+            'ok' => false,
+            'error' => 'failed to start exiftool',
+        ];
+    }
+
+    fclose($pipes[0]);
+    $stdout = stream_get_contents($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    $exit = proc_close($process);
+    if ($exit !== 0) {
+        $msg = trim((string)$stderr !== '' ? (string)$stderr : (string)$stdout);
+        if ($msg === '') {
+            $msg = 'exiftool orientation update failed';
+        }
+        return [
+            'attempted' => true,
+            'ok' => false,
+            'error' => $msg,
+        ];
+    }
+
+    return [
+        'attempted' => true,
+        'ok' => true,
+        'error' => '',
+    ];
+}
+
+function tmpRotatePath(string $path): string
+{
+    $dir = dirname($path);
+    $name = pathinfo($path, PATHINFO_FILENAME);
+    $ext = strtolower((string)pathinfo($path, PATHINFO_EXTENSION));
+    $suffix = '.rotate.' . getmypid() . '.' . bin2hex(random_bytes(4));
+    if ($ext !== '') {
+        return $dir . DIRECTORY_SEPARATOR . $name . $suffix . '.' . $ext;
+    }
+    return $path . $suffix;
+}
+
+function preserveOwnershipAndMode(string $source, string $dest): void
+{
+    $sourceStat = @stat($source);
+    if (!is_array($sourceStat)) {
+        return;
+    }
+    $mode = (int)($sourceStat['mode'] ?? 0) & 0777;
+    if ($mode > 0) {
+        @chmod($dest, $mode);
+    }
+    if (function_exists('posix_geteuid') && (int)posix_geteuid() === 0) {
+        if (isset($sourceStat['uid'])) {
+            @chown($dest, (int)$sourceStat['uid']);
+        }
+        if (isset($sourceStat['gid'])) {
+            @chgrp($dest, (int)$sourceStat['gid']);
+        }
+    }
 }
 
 function renderPdfThumb(array $config, string $pdfPath, string $destJpeg): bool

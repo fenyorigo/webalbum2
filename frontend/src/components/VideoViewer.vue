@@ -17,16 +17,26 @@
           {{ isPlaying ? "Pause" : "Play" }}
         </button>
         <button class="viewer-btn" @click="stopPlayback" aria-label="Stop">Stop</button>
-        <button v-if="canEditTags" class="viewer-btn" @click="rotateLeft" aria-label="Rotate counterclockwise">↺</button>
-        <button v-if="canEditTags" class="viewer-btn" @click="rotateRight" aria-label="Rotate clockwise">↻</button>
+        <button class="viewer-btn" @click="openObject" aria-label="Open object">Object</button>
+        <button v-if="canProposeRotate" class="viewer-btn" @click="rotateLeft" aria-label="Rotate counterclockwise">↺</button>
+        <button v-if="canProposeRotate" class="viewer-btn" @click="rotateRight" aria-label="Rotate clockwise">↻</button>
         <button
-          v-if="canEditTags && pendingQuarterTurns !== 0"
+          v-if="canProposeRotate && pendingQuarterTurns !== 0"
           class="viewer-btn"
           :disabled="rotateSaving"
-          @click="saveRotation"
-          aria-label="Save rotation"
+          @click="createRotateProposal"
+          aria-label="Create rotate proposal"
         >
-          Save
+          Create proposal
+        </button>
+        <button
+          v-if="canProposeRotate && pendingQuarterTurns !== 0"
+          class="viewer-btn"
+          :disabled="rotateSaving"
+          @click="cancelPendingRotation"
+          aria-label="Cancel preview rotation"
+        >
+          Cancel
         </button>
         <button
           v-if="canEditTags"
@@ -84,7 +94,7 @@
         {{ currentTags.join(", ") }}
       </div>
       <div v-if="mediaError" class="viewer-badge">{{ mediaError }}</div>
-      <div v-if="rotateSaving" class="viewer-badge">Rotate video, please wait</div>
+      <div v-if="rotateSaving" class="viewer-badge">Creating proposal...</div>
       <div v-if="toast" class="viewer-inline-toast">{{ toast }}</div>
     </div>
 
@@ -139,7 +149,7 @@ export default {
     videoUrl: { type: Function, required: true },
     currentUser: { type: Object, default: null }
   },
-  emits: ["close", "trashed", "open-asset", "open-image", "rotated"],
+  emits: ["close", "trashed", "open-asset", "open-image", "open-object", "rotated"],
   data() {
     return {
       index: 0,
@@ -177,6 +187,13 @@ export default {
     },
     canTrash() {
       return this.canEditTags;
+    },
+    canProposeRotate() {
+      const user = this.currentUser || window.__wa_current_user || null;
+      if (!user || !this.current || this.current.type !== "video") {
+        return false;
+      }
+      return this.fileExt(this.current.path || "") === "mp4";
     },
     mediaTransformStyle() {
       const deg = this.pendingQuarterTurns * 90;
@@ -280,6 +297,14 @@ export default {
       const parts = path.split("/");
       return parts[parts.length - 1] || path;
     },
+    fileExt(path) {
+      const value = String(path || "");
+      const dot = value.lastIndexOf(".");
+      if (dot < 0 || dot === value.length - 1) {
+        return "";
+      }
+      return value.slice(dot + 1).toLowerCase();
+    },
     onMediaError() {
       this.mediaError = "Trashed";
     },
@@ -324,36 +349,57 @@ export default {
         this.pendingQuarterTurns -= 4;
       }
     },
-    async saveRotation() {
+    async createRotateProposal() {
       if (!this.current || this.pendingQuarterTurns === 0 || this.rotateSaving) {
         return;
       }
       this.rotateSaving = true;
-      this.stopPlayback(true);
       try {
-        const res = await fetch(`/api/media/${this.current.id}/rotate`, {
+        const resolveRes = await fetch(`/api/objects/resolve?file_id=${this.current.id}`);
+        const resolved = await resolveRes.json().catch(() => ({}));
+        if (!resolveRes.ok) {
+          this.toast = resolved.error || "Failed to resolve object";
+          return;
+        }
+        const sha256 = String(resolved.sha256 || "");
+        if (!sha256) {
+          this.toast = "Object SHA-256 not available";
+          return;
+        }
+        const proposalType = this.pendingQuarterTurns < 0 ? "rotate_left" : "rotate_right";
+        const res = await fetch("/api/objects/proposals", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quarter_turns: this.pendingQuarterTurns })
+          body: JSON.stringify({
+            sha256,
+            proposal_type: proposalType,
+            payload: null
+          })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          this.toast = data.error || "Failed to rotate video";
+          this.toast = data.error || "Failed to create proposal";
           return;
         }
         this.pendingQuarterTurns = 0;
-        this.rotateVersion = Date.now();
-        this.loadCurrentVideo();
-        this.$emit("rotated", { id: this.current.id, at: this.rotateVersion, type: "video" });
-        this.toast = "Rotation saved";
+        this.toast = "Rotate proposal created";
         setTimeout(() => {
           this.toast = "";
-        }, 2500);
+        }, 2000);
       } catch (_e) {
-        this.toast = "Failed to rotate video";
+        this.toast = "Failed to create proposal";
       } finally {
         this.rotateSaving = false;
       }
+    },
+    cancelPendingRotation() {
+      this.pendingQuarterTurns = 0;
+    },
+    openObject() {
+      if (!this.current) {
+        return;
+      }
+      this.$emit("open-object", this.current);
     },
     stopPlayback(releaseSrc = false) {
       const video = this.$refs.video;

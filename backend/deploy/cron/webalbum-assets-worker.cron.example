@@ -1,0 +1,1 @@
+* * * * * /usr/bin/php __WEBALBUM_ROOT__/backend/bin/assets_worker.php --max-jobs=200 >> __WEBALBUM_ROOT__/backend/var/worker.cron.log 2>&1

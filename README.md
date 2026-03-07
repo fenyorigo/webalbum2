@@ -238,10 +238,52 @@ This check verifies that an outside path such as `/etc/passwd` is rejected by th
 
 ## Worker files
 
-- `backend/bin/assets_worker.php`: background worker for `wa_jobs` (`doc_pdf_preview`, `doc_thumb`).
+- `backend/bin/assets_worker.php`: background worker for `wa_jobs` (`doc_pdf_preview`, `doc_thumb`) and `wa_object_transform_jobs` (`rotate`).
 - `backend/deploy/systemd/webalbum-assets-worker.service`: systemd service template (batch worker).
 - `backend/deploy/systemd/webalbum-assets-worker.timer`: systemd timer template.
 - `backend/deploy/systemd/assets-worker.env.example`: environment template for worker runtime.
+- `backend/deploy/launchd/com.webalbum.assets-worker.plist.example`: macOS launchd template for continuous worker.
+- `backend/deploy/cron/webalbum-assets-worker.cron.example`: cron template for per-minute batch worker.
+
+### Run Worker Continuously
+
+Linux (systemd timer):
+
+```bash
+sudo cp backend/deploy/systemd/webalbum-assets-worker.service /etc/systemd/system/
+sudo cp backend/deploy/systemd/webalbum-assets-worker.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now webalbum-assets-worker.timer
+sudo systemctl status webalbum-assets-worker.timer
+```
+
+macOS (launchd, every minute batch):
+
+```bash
+ROOT="/Users/bajanp/Projects/webalbum2"
+PLIST="$HOME/Library/LaunchAgents/com.webalbum.assets-worker.plist"
+SQLITE_DB="/var/lib/webalbum/index/indexer2.db"
+PHOTOS_ROOT="/data/photos"
+THUMBS_ROOT="/data/photos-thumbs"
+sed \
+  -e "s|__WEBALBUM_ROOT__|$ROOT|g" \
+  -e "s|__WA_SQLITE_DB__|$SQLITE_DB|g" \
+  -e "s|__WA_PHOTOS_ROOT__|$PHOTOS_ROOT|g" \
+  -e "s|__WA_THUMBS_ROOT__|$THUMBS_ROOT|g" \
+  backend/deploy/launchd/com.webalbum.assets-worker.plist.example > "$PLIST"
+launchctl bootout "gui/$(id -u)/com.webalbum.assets-worker" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$PLIST"
+launchctl kickstart -kp "gui/$(id -u)/com.webalbum.assets-worker"
+launchctl print "gui/$(id -u)/com.webalbum.assets-worker" | head -n 40
+```
+
+macOS/Linux (cron, batch every minute):
+
+```bash
+ROOT="/Users/bajanp/Projects/webalbum2"
+sed "s|__WEBALBUM_ROOT__|$ROOT|g" backend/deploy/cron/webalbum-assets-worker.cron.example | crontab -
+crontab -l
+```
 
 ## Fedora deploy checklist
 

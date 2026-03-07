@@ -20,6 +20,7 @@ final class Runner
         [$whereSql, $params] = Compiler::compileWhere($query["where"]);
 
         $idClause = "";
+        $idParams = [];
         if (is_array($restrictIds)) {
             if ($restrictIds === []) {
                 return [
@@ -29,8 +30,7 @@ final class Runner
                     "total" => 0,
                 ];
             }
-            $placeholders = implode(",", array_fill(0, count($restrictIds), "?"));
-            $idClause = " AND files.id IN (" . $placeholders . ")";
+            [$idClause, $idParams] = $this->buildIdClause($restrictIds);
         }
 
         $excludeClause = "";
@@ -76,8 +76,8 @@ final class Runner
 
          $countSql = "SELECT COUNT(*) AS c FROM files WHERE " . $whereSql . $idClause . $excludeClause . $excludeRelPathClause . $folderClause;
         $countParams = $params;
-        if ($restrictIds) {
-            $countParams = array_merge($countParams, $restrictIds);
+        if ($idParams !== []) {
+            $countParams = array_merge($countParams, $idParams);
         }
         if ($excludeParams !== []) {
             $countParams = array_merge($countParams, $excludeParams);
@@ -93,8 +93,8 @@ final class Runner
 
         $sql = "SELECT id, path, taken_ts, type FROM files WHERE " . $whereSql . $idClause . $excludeClause . $excludeRelPathClause . $folderClause;
         $queryParams = $params;
-        if ($restrictIds) {
-            $queryParams = array_merge($queryParams, $restrictIds);
+        if ($idParams !== []) {
+            $queryParams = array_merge($queryParams, $idParams);
         }
         if ($excludeParams !== []) {
             $queryParams = array_merge($queryParams, $excludeParams);
@@ -131,5 +131,23 @@ final class Runner
     private static function escapeLike(string $value): string
     {
         return str_replace(["\\", "%", "_"], ["\\\\", "\\%", "\\_"], $value);
+    }
+
+    private function buildIdClause(array $restrictIds): array
+    {
+        $ids = array_values(array_unique(array_map(static fn ($v): int => (int)$v, $restrictIds)));
+        $ids = array_values(array_filter($ids, static fn (int $id): bool => $id > 0));
+        if ($ids === []) {
+            return [" AND 1=0", []];
+        }
+
+        $chunkSize = 500;
+        $parts = [];
+        $params = [];
+        foreach (array_chunk($ids, $chunkSize) as $chunk) {
+            $parts[] = "files.id IN (" . implode(",", array_fill(0, count($chunk), "?")) . ")";
+            $params = array_merge($params, $chunk);
+        }
+        return [" AND (" . implode(" OR ", $parts) . ")", $params];
     }
 }

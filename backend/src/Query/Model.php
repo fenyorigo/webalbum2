@@ -29,6 +29,7 @@ final class Model
             throw new \InvalidArgumentException("where must be an object");
         }
         $onlyFavorites = false;
+        $hasNotes = false;
         $folderRelPath = null;
         $folderId = null;
         if (array_key_exists("only_favorites", $whereInput)) {
@@ -37,6 +38,13 @@ final class Model
             }
             $onlyFavorites = $whereInput["only_favorites"];
             unset($whereInput["only_favorites"]);
+        }
+        if (array_key_exists("has_notes", $whereInput)) {
+            if (!is_bool($whereInput["has_notes"])) {
+                throw new \InvalidArgumentException("where.has_notes must be a boolean");
+            }
+            $hasNotes = $whereInput["has_notes"];
+            unset($whereInput["has_notes"]);
         }
         if (array_key_exists("folder_rel_path", $whereInput)) {
             $value = $whereInput["folder_rel_path"];
@@ -87,6 +95,7 @@ final class Model
             "limit" => $limit,
             "offset" => $offset,
             "only_favorites" => $onlyFavorites,
+            "has_notes" => $hasNotes,
             "folder_rel_path" => $folderRelPath,
             "folder_id" => $folderId,
         ];

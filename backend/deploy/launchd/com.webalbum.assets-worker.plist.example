@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.webalbum.assets-worker</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/php</string>
+    <string>__WEBALBUM_ROOT__/backend/bin/assets_worker.php</string>
+    <string>--max-jobs=200</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__WEBALBUM_ROOT__</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>WA_SQLITE_DB</key>
+    <string>__WA_SQLITE_DB__</string>
+    <key>WA_PHOTOS_ROOT</key>
+    <string>__WA_PHOTOS_ROOT__</string>
+    <key>WA_THUMBS_ROOT</key>
+    <string>__WA_THUMBS_ROOT__</string>
+    <key>WEBALBUM_DB_NAME</key>
+    <string>webalbum2</string>
+    <key>WA_DB_NAME</key>
+    <string>webalbum2</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StartInterval</key>
+  <integer>60</integer>
+
+  <key>StandardOutPath</key>
+  <string>__WEBALBUM_ROOT__/backend/var/worker.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>__WEBALBUM_ROOT__/backend/var/worker.err.log</string>
+</dict>
+</plist>

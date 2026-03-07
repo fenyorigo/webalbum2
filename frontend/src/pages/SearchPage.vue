@@ -116,6 +116,10 @@
           </select>
         </label>
         <label>
+          <span>Has notes</span>
+          <input v-model="form.hasNotes" type="checkbox" />
+        </label>
+        <label>
           Extension
           <select v-model="form.ext">
             <option value="">Any</option>
@@ -226,6 +230,7 @@
         :copy-link="copyLink"
         :file-name="fileName"
         @open="openViewer"
+        @open-object="openObjectPage"
         @toggle-favorite="toggleFavorite"
         @update:selected-ids="selectedIds = $event"
       />
@@ -242,6 +247,7 @@
         :copy-link="copyLink"
         :file-name="fileName"
         @open="openViewer"
+        @open-object="openObjectPage"
         @toggle-favorite="toggleFavorite"
         @update:selected-ids="selectedIds = $event"
         @request-trash="requestTrash"
@@ -302,6 +308,7 @@
       @trashed="onItemTrashed"
       @open-asset="openAssetFromImageViewer"
       @open-video="openVideoFromImageViewer"
+      @open-object="openObjectPage"
       @rotated="onMediaRotated"
     />
     <video-viewer
@@ -314,6 +321,7 @@
       @trashed="onItemTrashed"
       @open-asset="openAssetFromVideoViewer"
       @open-image="openImageFromVideoViewer"
+      @open-object="openObjectPage"
       @rotated="onMediaRotated"
     />
     <div v-if="assetViewerOpen" class="modal-backdrop" @click.self="closeAssetViewer">
@@ -333,6 +341,7 @@
           <button class="inline" type="button" @click="assetPrev" :disabled="assetViewerIndex <= 0">Previous</button>
           <button class="inline" type="button" @click="assetNext" :disabled="assetViewerIndex < 0 || assetViewerIndex >= results.length - 1">Next</button>
           <button class="inline" type="button" @click="openAssetOriginal">Download original</button>
+          <button class="inline" type="button" @click="openObjectPage(assetViewerRow)">Object notes</button>
         </div>
         <p v-if="assetViewerError" class="error">{{ assetViewerError }}</p>
       </div>
@@ -396,6 +405,7 @@ export default {
         type: "",
         ext: "",
         onlyFavorites: false,
+        hasNotes: false,
         sortField: "path",
         sortDir: "asc",
         limit: 50
@@ -449,10 +459,12 @@ export default {
     this.applyLoadFromRoute();
     window.addEventListener("wa-auth-changed", this.onUserChanged);
     window.addEventListener("wa-prefs-changed", this.onPrefsChanged);
+    window.addEventListener("wa-media-thumb-refresh", this.onMediaThumbRefresh);
   },
   beforeUnmount() {
     window.removeEventListener("wa-auth-changed", this.onUserChanged);
     window.removeEventListener("wa-prefs-changed", this.onPrefsChanged);
+    window.removeEventListener("wa-media-thumb-refresh", this.onMediaThumbRefresh);
   },
   methods: {
     onUserChanged(event) {
@@ -460,6 +472,16 @@ export default {
     },
     onPrefsChanged(event) {
       this.applyPrefs(event.detail || null);
+    },
+    onMediaThumbRefresh(event) {
+      const stamp = Number(event && event.detail && event.detail.at ? event.detail.at : Date.now());
+      const next = { ...this.mediaCacheBust };
+      for (const row of this.results) {
+        if (row && row.type === "video" && row.id) {
+          next[row.id] = stamp;
+        }
+      }
+      this.mediaCacheBust = next;
     },
     applyPrefs(prefs) {
       if (!prefs) {
@@ -589,6 +611,7 @@ export default {
         type: typeItem && typeof typeItem.value === "string" ? typeItem.value : "",
         ext: extItem && typeof extItem.value === "string" ? extItem.value : "",
         onlyFavorites: !!where.only_favorites,
+        hasNotes: !!where.has_notes,
         sortField: "path",
         sortDir: "asc",
         limit: 50
@@ -667,7 +690,8 @@ export default {
       const where = {
         group: "ALL",
         items,
-        only_favorites: this.form.onlyFavorites
+        only_favorites: this.form.onlyFavorites,
+        has_notes: !!this.form.hasNotes
       };
       if (this.selectedFolder && this.selectedFolder.id) {
         // Tree-selected folder should filter direct files only.
@@ -1226,6 +1250,7 @@ This is reversible from Admin -> Trash.`);
         type: "",
         ext: "",
         onlyFavorites: false,
+        hasNotes: false,
         sortField: "path",
         sortDir: "asc",
         limit: pageSize
@@ -1371,6 +1396,24 @@ This is reversible from Admin -> Trash.`);
       }
       window.open(url, "_blank", "noopener");
     },
+    openObjectPage(row) {
+      if (!row) {
+        return;
+      }
+      this.viewerOpen = false;
+      this.videoViewerOpen = false;
+      this.assetViewerOpen = false;
+      const query = {};
+      if (row.entity === "asset" && row.asset_id) {
+        query.asset_id = String(row.asset_id);
+      } else if (row.id) {
+        query.file_id = String(row.id);
+      } else {
+        this.showToast("Object reference missing");
+        return;
+      }
+      this.$router.push({ path: "/object", query });
+    },
     async onItemTrashed() {
       this.viewerOpen = false;
       this.videoViewerOpen = false;
@@ -1444,6 +1487,13 @@ This is reversible from Admin -> Trash.`);
       this.runSearch();
     },
     "form.onlyFavorites"() {
+      if (this.suspendAuto) {
+        return;
+      }
+      this.page = 1;
+      this.runSearch();
+    },
+    "form.hasNotes"() {
       if (this.suspendAuto) {
         return;
       }

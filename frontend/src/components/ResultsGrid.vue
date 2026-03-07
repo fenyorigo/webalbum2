@@ -57,7 +57,10 @@
           🗑
         </button>
         <span v-else></span>
-        <button class="copy" type="button" @click="copyLink(row)">Copy</button>
+        <div class="grid-actions-right">
+          <button class="copy" type="button" @click="$emit('open-object', row)">Object</button>
+          <button class="copy" type="button" @click="copyLink(row)">Copy</button>
+        </div>
       </div>
     </div>
   </div>
@@ -108,6 +111,10 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.grid-actions-right {
+  display: flex;
+  gap: 8px;
 }
 .trash {
   border: 1px solid #d6c9b5;

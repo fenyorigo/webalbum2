@@ -53,7 +53,10 @@
             {{ row.path }}
           </button>
           <div class="item-id">ID: {{ dbId(row) }}</div>
-          <button class="copy" type="button" @click="copyLink(row)">Copy</button>
+          <div class="row-actions">
+            <button class="copy" type="button" @click="copyLink(row)">Copy</button>
+            <button class="copy" type="button" @click="$emit('open-object', row)">Object</button>
+          </div>
         </td>
         <td>{{ row.type }}</td>
         <td><span v-if="row.taken_ts" class="ts">{{ formatTs(row.taken_ts) }}</span></td>
@@ -105,5 +108,10 @@ export default {
   color: #6f6556;
   font-size: 12px;
   margin-top: 2px;
+}
+.row-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
 }
 </style>

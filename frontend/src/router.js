@@ -6,8 +6,12 @@ import SavedSearchesPage from "./pages/SavedSearchesPage.vue";
 import LoginPage from "./pages/LoginPage.vue";
 import SetupPage from "./pages/SetupPage.vue";
 import ProfilePage from "./pages/ProfilePage.vue";
+import MyProposalsPage from "./pages/MyProposalsPage.vue";
+import MyNotesPage from "./pages/MyNotesPage.vue";
 import TrashPage from "./pages/TrashPage.vue";
 import AssetsPage from "./pages/AssetsPage.vue";
+import ObjectPage from "./pages/ObjectPage.vue";
+import ObjectProposalsAdminPage from "./pages/ObjectProposalsAdminPage.vue";
 
 const routes = [
   { path: "/login", component: LoginPage },
@@ -17,8 +21,12 @@ const routes = [
   { path: "/favorites", component: FavoritesPage },
   { path: "/saved-searches", component: SavedSearchesPage },
   { path: "/profile", component: ProfilePage },
+  { path: "/my-proposals", component: MyProposalsPage },
+  { path: "/my-notes", component: MyNotesPage },
   { path: "/trash", component: TrashPage },
-  { path: "/assets", component: AssetsPage }
+  { path: "/assets", component: AssetsPage },
+  { path: "/object", component: ObjectPage },
+  { path: "/admin/object-proposals", component: ObjectProposalsAdminPage }
 ];
 
 const router = createRouter({
@@ -70,7 +78,7 @@ router.beforeEach(async (to) => {
     }
     return "/login";
   }
-  if ((to.path === "/trash" || to.path === "/assets") && !user.is_admin) {
+  if ((to.path === "/trash" || to.path === "/assets" || to.path === "/admin/object-proposals") && !user.is_admin) {
     return "/";
   }
   return true;

@@ -40,6 +40,9 @@ use WebAlbum\Http\Controllers\MaintenanceController;
 use WebAlbum\Http\Controllers\TreeController;
 use WebAlbum\Http\Controllers\AdminAssetsController;
 use WebAlbum\Http\Controllers\AssetController;
+use WebAlbum\Http\Controllers\ObjectAdminController;
+use WebAlbum\Http\Controllers\ObjectCollabController;
+use WebAlbum\Http\Controllers\ObjectResolveController;
 
 $method = $_SERVER["REQUEST_METHOD"] ?? "GET";
 $uri = $_SERVER["REQUEST_URI"] ?? "/";
@@ -171,6 +174,70 @@ if ($method === "POST" && $path === "/api/admin/assets/scan") {
 }
 if ($method === "GET" && $path === "/api/admin/jobs/status") {
     (new AdminAssetsController($root . "/config/config.php"))->jobsStatus();
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/objects/sync") {
+    (new ObjectAdminController($root . "/config/config.php"))->sync();
+    exit;
+}
+if ($method === "GET" && $path === "/api/objects/resolve") {
+    (new ObjectResolveController($root . "/config/config.php"))->resolve();
+    exit;
+}
+if ($method === "GET" && $path === "/api/objects/notes") {
+    (new ObjectCollabController($root . "/config/config.php"))->listNotes();
+    exit;
+}
+if ($method === "GET" && $path === "/api/objects/notes/mine") {
+    (new ObjectCollabController($root . "/config/config.php"))->listMyNotes();
+    exit;
+}
+if ($method === "POST" && $path === "/api/objects/notes") {
+    (new ObjectCollabController($root . "/config/config.php"))->createNote();
+    exit;
+}
+if ($method === "PUT" && preg_match("#^/api/objects/notes/(\\d+)$#", $path, $m)) {
+    (new ObjectCollabController($root . "/config/config.php"))->updateNote((int)$m[1]);
+    exit;
+}
+if ($method === "DELETE" && preg_match("#^/api/objects/notes/(\\d+)$#", $path, $m)) {
+    (new ObjectCollabController($root . "/config/config.php"))->deleteNote((int)$m[1]);
+    exit;
+}
+if ($method === "POST" && $path === "/api/objects/proposals") {
+    (new ObjectCollabController($root . "/config/config.php"))->submitProposal();
+    exit;
+}
+if ($method === "GET" && $path === "/api/objects/proposals/mine") {
+    (new ObjectCollabController($root . "/config/config.php"))->listMyProposals();
+    exit;
+}
+if ($method === "GET" && $path === "/api/objects/jobs") {
+    (new ObjectCollabController($root . "/config/config.php"))->listTransformJobs();
+    exit;
+}
+if ($method === "GET" && $path === "/api/objects/jobs/active-summary") {
+    (new ObjectCollabController($root . "/config/config.php"))->activeTransformJobsSummary();
+    exit;
+}
+if ($method === "GET" && $path === "/api/objects/proposals") {
+    (new ObjectCollabController($root . "/config/config.php"))->listProposals();
+    exit;
+}
+if ($method === "POST" && preg_match("#^/api/objects/proposals/(\\d+)/cancel$#", $path, $m)) {
+    (new ObjectCollabController($root . "/config/config.php"))->cancelProposal((int)$m[1]);
+    exit;
+}
+if ($method === "GET" && $path === "/api/admin/objects/proposals") {
+    (new ObjectCollabController($root . "/config/config.php"))->listProposalsAdmin();
+    exit;
+}
+if ($method === "GET" && $path === "/api/admin/objects/jobs") {
+    (new ObjectCollabController($root . "/config/config.php"))->listTransformJobsAdmin();
+    exit;
+}
+if ($method === "POST" && preg_match("#^/api/admin/objects/proposals/(\\d+)/review$#", $path, $m)) {
+    (new ObjectCollabController($root . "/config/config.php"))->reviewProposalAdmin((int)$m[1]);
     exit;
 }
 if ($method === "GET" && $path === "/api/asset") {
