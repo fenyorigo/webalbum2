@@ -18,6 +18,23 @@
         </button>
         <button class="viewer-btn" @click="stopPlayback" aria-label="Stop">Stop</button>
         <button class="viewer-btn" @click="openObject" aria-label="Open object">Object</button>
+        <label class="viewer-slideshow-control">
+          <span>Sec</span>
+          <input
+            :value="slideshowSeconds"
+            type="number"
+            min="1"
+            max="3600"
+            @input="onSlideshowSecondsInput"
+          />
+        </label>
+        <button
+          class="viewer-btn"
+          @click="toggleSlideshow"
+          :aria-label="slideshowActive ? 'End slideshow' : 'Start slideshow'"
+        >
+          {{ slideshowActive ? "End slideshow" : "Start slideshow" }}
+        </button>
         <button v-if="canProposeRotate" class="viewer-btn" @click="rotateLeft" aria-label="Rotate counterclockwise">↺</button>
         <button v-if="canProposeRotate" class="viewer-btn" @click="rotateRight" aria-label="Rotate clockwise">↻</button>
         <button
@@ -76,7 +93,7 @@
             :style="mediaTransformStyle"
             @play="isPlaying = true"
             @pause="isPlaying = false"
-            @ended="isPlaying = false"
+            @ended="onVideoEnded"
             @error="onMediaError"
           />
           <div v-else class="viewer-placeholder">Video not available</div>
@@ -147,9 +164,22 @@ export default {
     startId: { type: Number, required: true },
     isOpen: { type: Boolean, required: true },
     videoUrl: { type: Function, required: true },
-    currentUser: { type: Object, default: null }
+    currentUser: { type: Object, default: null },
+    slideshowActive: { type: Boolean, default: false },
+    slideshowSeconds: { type: Number, default: 5 }
   },
-  emits: ["close", "trashed", "open-asset", "open-image", "open-object", "rotated"],
+  emits: [
+    "close",
+    "trashed",
+    "open-asset",
+    "open-image",
+    "open-object",
+    "rotated",
+    "slideshow-start",
+    "slideshow-stop",
+    "slideshow-seconds-change",
+    "slideshow-finished"
+  ],
   data() {
     return {
       index: 0,
@@ -242,10 +272,23 @@ export default {
         this.loadCurrentVideo();
         this.fetchCurrentTags();
       }
+    },
+    slideshowActive() {
+      if (!this.isOpen) {
+        return;
+      }
+      if (!this.slideshowActive) {
+        this.stopPlayback();
+        return;
+      }
+      this.autoplayCurrentVideo();
     }
   },
   methods: {
     close() {
+      if (this.slideshowActive) {
+        this.$emit("slideshow-stop");
+      }
       this.stopPlayback(true);
       this.pendingQuarterTurns = 0;
       this.rotateVersion = 0;
@@ -293,6 +336,17 @@ export default {
       }
       this.showToast("Preview not supported for this file type");
     },
+    toggleSlideshow() {
+      if (this.slideshowActive) {
+        this.$emit("slideshow-stop");
+        return;
+      }
+      this.$emit("slideshow-start", this.slideshowSeconds);
+    },
+    onSlideshowSecondsInput(event) {
+      const value = Number(event && event.target ? event.target.value : 0);
+      this.$emit("slideshow-seconds-change", value);
+    },
     fileName(path) {
       const parts = path.split("/");
       return parts[parts.length - 1] || path;
@@ -324,7 +378,35 @@ export default {
           video.pause();
           video.currentTime = 0;
         }
+        if (this.slideshowActive) {
+          this.autoplayCurrentVideo();
+        }
       });
+    },
+    autoplayCurrentVideo() {
+      this.$nextTick(() => {
+        const video = this.$refs.video;
+        if (!video) {
+          return;
+        }
+        try {
+          video.currentTime = 0;
+        } catch (_e) {
+          // ignore
+        }
+        video.play().catch(() => {});
+      });
+    },
+    onVideoEnded() {
+      this.isPlaying = false;
+      if (!this.slideshowActive) {
+        return;
+      }
+      if (this.index >= this.results.length - 1) {
+        this.$emit("slideshow-finished");
+        return;
+      }
+      this.next();
     },
     togglePlay() {
       const video = this.$refs.video;
@@ -656,6 +738,23 @@ export default {
 <style scoped>
 .tag-editor-modal {
   width: min(640px, 92vw);
+}
+
+.viewer-slideshow-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #f4ead7;
+}
+
+.viewer-slideshow-control input {
+  width: 72px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  padding: 6px 8px;
 }
 
 .tag-editor-chips {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.1.0 - 2026-03-11
+- Added cross-result slideshow controls in preview modals for images, videos, audio, and document assets.
+- Slideshow timing is user-selectable for static previews, while videos and audio now advance after playback ends.
+
 ## 1.5.7 - 2026-03-05
 - Multi-page TIFF/HEIC runtime handling added in viewer with per-page preview caching.
 

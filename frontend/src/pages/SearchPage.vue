@@ -304,12 +304,18 @@
       :is-open="viewerOpen"
       :file-url="fileUrl"
       :current-user="currentUser"
+      :slideshow-active="slideshowActive"
+      :slideshow-seconds="slideshowSeconds"
       @close="closeViewer"
       @trashed="onItemTrashed"
       @open-asset="openAssetFromImageViewer"
       @open-video="openVideoFromImageViewer"
       @open-object="openObjectPage"
       @rotated="onMediaRotated"
+      @slideshow-start="startSlideshow"
+      @slideshow-stop="stopSlideshow"
+      @slideshow-seconds-change="updateSlideshowSeconds"
+      @slideshow-finished="finishSlideshow"
     />
     <video-viewer
       :results="results"
@@ -317,12 +323,18 @@
       :is-open="videoViewerOpen"
       :video-url="videoUrl"
       :current-user="currentUser"
+      :slideshow-active="slideshowActive"
+      :slideshow-seconds="slideshowSeconds"
       @close="closeVideoViewer"
       @trashed="onItemTrashed"
       @open-asset="openAssetFromVideoViewer"
       @open-image="openImageFromVideoViewer"
       @open-object="openObjectPage"
       @rotated="onMediaRotated"
+      @slideshow-start="startSlideshow"
+      @slideshow-stop="stopSlideshow"
+      @slideshow-seconds-change="updateSlideshowSeconds"
+      @slideshow-finished="finishSlideshow"
     />
     <div v-if="assetViewerOpen" class="modal-backdrop" @click.self="closeAssetViewer">
       <div class="modal asset-modal">
@@ -332,12 +344,24 @@
         </div>
         <p class="muted" :title="assetViewerRow && assetViewerRow.path">{{ assetViewerRow && assetViewerRow.path }}</p>
         <div v-if="assetViewerRow && assetViewerRow.type === 'audio'" class="asset-body">
-          <audio controls :src="assetFileUrl(assetViewerRow)"></audio>
+          <audio
+            ref="assetAudio"
+            controls
+            :src="assetFileUrl(assetViewerRow)"
+            @ended="onAssetAudioEnded"
+          ></audio>
         </div>
         <div v-else class="asset-body doc-body">
           <iframe :src="assetViewUrl(assetViewerRow)" title="Document preview"></iframe>
         </div>
         <div class="modal-actions">
+          <label class="slideshow-control">
+            <span>Sec</span>
+            <input v-model.number="slideshowSeconds" type="number" min="1" max="3600" />
+          </label>
+          <button class="inline" type="button" @click="toggleSlideshow">
+            {{ slideshowActive ? "End slideshow" : "Start slideshow" }}
+          </button>
           <button class="inline" type="button" @click="assetPrev" :disabled="assetViewerIndex <= 0">Previous</button>
           <button class="inline" type="button" @click="assetNext" :disabled="assetViewerIndex < 0 || assetViewerIndex >= results.length - 1">Next</button>
           <button class="inline" type="button" @click="openAssetOriginal">Download original</button>
@@ -437,7 +461,10 @@ export default {
       assetViewerOpen: false,
       assetViewerRow: null,
       assetViewerError: "",
-      mediaCacheBust: {}
+      mediaCacheBust: {},
+      slideshowActive: false,
+      slideshowSeconds: 5,
+      slideshowTimer: null
     };
   },
   computed: {
@@ -462,6 +489,7 @@ export default {
     window.addEventListener("wa-media-thumb-refresh", this.onMediaThumbRefresh);
   },
   beforeUnmount() {
+    this.clearSlideshowTimer();
     window.removeEventListener("wa-auth-changed", this.onUserChanged);
     window.removeEventListener("wa-prefs-changed", this.onPrefsChanged);
     window.removeEventListener("wa-media-thumb-refresh", this.onMediaThumbRefresh);
@@ -469,6 +497,92 @@ export default {
   methods: {
     onUserChanged(event) {
       this.currentUser = event.detail || null;
+    },
+    updateSlideshowSeconds(value) {
+      const parsed = Number(value);
+      const next = Math.min(3600, Math.max(1, Number.isFinite(parsed) ? parsed : 5));
+      this.slideshowSeconds = next;
+      if (this.slideshowActive) {
+        this.syncAssetSlideshow();
+      }
+    },
+    startSlideshow(value) {
+      this.updateSlideshowSeconds(value);
+      this.slideshowActive = true;
+      this.syncAssetSlideshow();
+    },
+    stopSlideshow() {
+      this.slideshowActive = false;
+      this.clearSlideshowTimer();
+      this.stopAssetAudioPlayback();
+    },
+    finishSlideshow() {
+      this.stopSlideshow();
+    },
+    toggleSlideshow() {
+      if (this.slideshowActive) {
+        this.stopSlideshow();
+        return;
+      }
+      this.startSlideshow(this.slideshowSeconds);
+    },
+    clearSlideshowTimer() {
+      if (this.slideshowTimer) {
+        window.clearTimeout(this.slideshowTimer);
+        this.slideshowTimer = null;
+      }
+    },
+    stopAssetAudioPlayback() {
+      const audio = this.$refs.assetAudio;
+      if (!audio) {
+        return;
+      }
+      audio.pause();
+      try {
+        audio.currentTime = 0;
+      } catch (_e) {
+        // ignore
+      }
+    },
+    syncAssetSlideshow() {
+      this.clearSlideshowTimer();
+      if (!this.slideshowActive || !this.assetViewerOpen || !this.assetViewerRow) {
+        return;
+      }
+      if (this.assetViewerRow.type === "audio") {
+        this.$nextTick(() => {
+          const audio = this.$refs.assetAudio;
+          if (!audio) {
+            return;
+          }
+          try {
+            audio.currentTime = 0;
+          } catch (_e) {
+            // ignore
+          }
+          audio.play().catch(() => {});
+        });
+        return;
+      }
+      const seconds = Math.max(1, Number(this.slideshowSeconds || 5));
+      this.slideshowTimer = window.setTimeout(() => {
+        this.slideshowTimer = null;
+        if (this.assetViewerIndex < 0 || this.assetViewerIndex >= this.results.length - 1) {
+          this.finishSlideshow();
+          return;
+        }
+        this.assetNext();
+      }, seconds * 1000);
+    },
+    onAssetAudioEnded() {
+      if (!this.slideshowActive) {
+        return;
+      }
+      if (this.assetViewerIndex < 0 || this.assetViewerIndex >= this.results.length - 1) {
+        this.finishSlideshow();
+        return;
+      }
+      this.assetNext();
     },
     onPrefsChanged(event) {
       this.applyPrefs(event.detail || null);
@@ -1006,6 +1120,7 @@ export default {
         this.viewerOpen = false;
         this.videoViewerOpen = false;
         this.assetViewerOpen = false;
+        this.stopSlideshow();
         if (!this.canFavorite) {
           this.form.onlyFavorites = false;
         }
@@ -1282,6 +1397,7 @@ This is reversible from Admin -> Trash.`);
         this.assetViewerRow = row;
         this.assetViewerError = "";
         this.assetViewerOpen = true;
+        this.syncAssetSlideshow();
         return;
       }
       if (row.type === "video") {
@@ -1289,6 +1405,7 @@ This is reversible from Admin -> Trash.`);
         this.viewerOpen = false;
         this.videoViewerStartId = id;
         this.videoViewerOpen = true;
+        this.clearSlideshowTimer();
         return;
       }
       if (row.type !== "image") {
@@ -1299,9 +1416,14 @@ This is reversible from Admin -> Trash.`);
       this.videoViewerOpen = false;
       this.viewerStartId = id;
       this.viewerOpen = true;
+      this.clearSlideshowTimer();
     },
     closeViewer() {
       this.viewerOpen = false;
+      this.clearSlideshowTimer();
+      if (this.slideshowActive) {
+        this.stopSlideshow();
+      }
     },
     openAssetFromImageViewer(row) {
       if (!row) {
@@ -1312,6 +1434,7 @@ This is reversible from Admin -> Trash.`);
       this.assetViewerError = "";
       this.assetViewerRow = row;
       this.assetViewerOpen = true;
+      this.syncAssetSlideshow();
     },
     openVideoFromImageViewer(id) {
       const targetId = Number(id || 0);
@@ -1322,6 +1445,7 @@ This is reversible from Admin -> Trash.`);
       this.assetViewerOpen = false;
       this.videoViewerStartId = targetId;
       this.videoViewerOpen = true;
+      this.clearSlideshowTimer();
     },
     openAssetFromVideoViewer(row) {
       if (!row) {
@@ -1332,6 +1456,7 @@ This is reversible from Admin -> Trash.`);
       this.assetViewerError = "";
       this.assetViewerRow = row;
       this.assetViewerOpen = true;
+      this.syncAssetSlideshow();
     },
     openImageFromVideoViewer(id) {
       const targetId = Number(id || 0);
@@ -1342,6 +1467,7 @@ This is reversible from Admin -> Trash.`);
       this.assetViewerOpen = false;
       this.viewerStartId = targetId;
       this.viewerOpen = true;
+      this.clearSlideshowTimer();
     },
     navigateFromAssetViewerIndex(targetIndex) {
       const row = this.results[targetIndex] || null;
@@ -1351,9 +1477,11 @@ This is reversible from Admin -> Trash.`);
       if (row.entity === "asset") {
         this.assetViewerRow = row;
         this.assetViewerError = "";
+        this.syncAssetSlideshow();
         return;
       }
       this.assetViewerOpen = false;
+      this.clearSlideshowTimer();
       if (row.type === "image") {
         this.viewerStartId = row.id;
         this.viewerOpen = true;
@@ -1380,11 +1508,20 @@ This is reversible from Admin -> Trash.`);
     },
     closeVideoViewer() {
       this.videoViewerOpen = false;
+      this.clearSlideshowTimer();
+      if (this.slideshowActive) {
+        this.stopSlideshow();
+      }
     },
     closeAssetViewer() {
+      this.clearSlideshowTimer();
+      this.stopAssetAudioPlayback();
       this.assetViewerOpen = false;
       this.assetViewerRow = null;
       this.assetViewerError = "";
+      if (this.slideshowActive) {
+        this.stopSlideshow();
+      }
     },
     openAssetOriginal() {
       if (!this.assetViewerRow) {
@@ -1400,6 +1537,7 @@ This is reversible from Admin -> Trash.`);
       if (!row) {
         return;
       }
+      this.stopSlideshow();
       this.viewerOpen = false;
       this.videoViewerOpen = false;
       this.assetViewerOpen = false;
@@ -1415,6 +1553,7 @@ This is reversible from Admin -> Trash.`);
       this.$router.push({ path: "/object", query });
     },
     async onItemTrashed() {
+      this.stopSlideshow();
       this.viewerOpen = false;
       this.videoViewerOpen = false;
       this.assetViewerOpen = false;
@@ -1499,6 +1638,17 @@ This is reversible from Admin -> Trash.`);
       }
       this.page = 1;
       this.runSearch();
+    },
+    slideshowSeconds(next) {
+      const parsed = Number(next);
+      const clamped = Math.min(3600, Math.max(1, Number.isFinite(parsed) ? parsed : 5));
+      if (clamped !== next) {
+        this.slideshowSeconds = clamped;
+        return;
+      }
+      if (this.slideshowActive) {
+        this.syncAssetSlideshow();
+      }
     },
     viewMode() {}
   },
@@ -1588,6 +1738,16 @@ This is reversible from Admin -> Trash.`);
 
 .asset-body audio {
   width: 100%;
+}
+
+.slideshow-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.slideshow-control input {
+  width: 72px;
 }
 
 .doc-body iframe {

@@ -21,6 +21,23 @@
         <button class="viewer-btn" @click="copyLink" aria-label="Copy link">Copy link</button>
         <button class="viewer-btn" @click="downloadCurrent" aria-label="Download">Download</button>
         <button class="viewer-btn" @click="openObject" aria-label="Open object">Object</button>
+        <label class="viewer-slideshow-control">
+          <span>Sec</span>
+          <input
+            :value="slideshowSeconds"
+            type="number"
+            min="1"
+            max="3600"
+            @input="onSlideshowSecondsInput"
+          />
+        </label>
+        <button
+          class="viewer-btn"
+          @click="toggleSlideshow"
+          :aria-label="slideshowActive ? 'End slideshow' : 'Start slideshow'"
+        >
+          {{ slideshowActive ? "End slideshow" : "Start slideshow" }}
+        </button>
         <button v-if="canProposeRotate" class="viewer-btn" @click="rotateLeft" aria-label="Rotate counterclockwise">↺</button>
         <button v-if="canProposeRotate" class="viewer-btn" @click="rotateRight" aria-label="Rotate clockwise">↻</button>
         <button
@@ -145,9 +162,22 @@ export default {
     startId: { type: Number, required: true },
     isOpen: { type: Boolean, required: true },
     fileUrl: { type: Function, required: true },
-    currentUser: { type: Object, default: null }
+    currentUser: { type: Object, default: null },
+    slideshowActive: { type: Boolean, default: false },
+    slideshowSeconds: { type: Number, default: 5 }
   },
-  emits: ["close", "trashed", "open-asset", "open-video", "open-object", "rotated"],
+  emits: [
+    "close",
+    "trashed",
+    "open-asset",
+    "open-video",
+    "open-object",
+    "rotated",
+    "slideshow-start",
+    "slideshow-stop",
+    "slideshow-seconds-change",
+    "slideshow-finished"
+  ],
   data() {
     return {
       index: 0,
@@ -166,7 +196,8 @@ export default {
       rotateVersion: 0,
       rotateSaving: false,
       currentPage: 0,
-      pageCount: 1
+      pageCount: 1,
+      slideshowTimer: null
     };
   },
   computed: {
@@ -211,10 +242,12 @@ export default {
           this.fetchCurrentPreviewMeta();
           this.preloadNeighbors();
           this.fetchCurrentTags();
+          this.syncSlideshowTimer();
           this.focusFirst();
         });
         window.addEventListener("keydown", this.onKeydown);
       } else {
+        this.clearSlideshowTimer();
         this.tagsById = {};
         this.closeEditor();
         document.body.style.overflow = "";
@@ -233,6 +266,7 @@ export default {
         this.fetchCurrentPreviewMeta();
         this.preloadNeighbors();
         this.fetchCurrentTags();
+        this.syncSlideshowTimer();
       }
     },
     results() {
@@ -244,6 +278,7 @@ export default {
         this.fetchCurrentPreviewMeta();
         this.preloadNeighbors();
         this.fetchCurrentTags();
+        this.syncSlideshowTimer();
       }
     },
     index() {
@@ -254,10 +289,21 @@ export default {
       this.fetchCurrentPreviewMeta();
       this.preloadNeighbors();
       this.fetchCurrentTags();
+      this.syncSlideshowTimer();
+    },
+    slideshowActive() {
+      this.syncSlideshowTimer();
+    },
+    slideshowSeconds() {
+      this.syncSlideshowTimer();
     }
   },
   methods: {
     close() {
+      if (this.slideshowActive) {
+        this.$emit("slideshow-stop");
+      }
+      this.clearSlideshowTimer();
       this.pendingQuarterTurns = 0;
       this.rotateVersion = 0;
       this.rotateSaving = false;
@@ -297,6 +343,38 @@ export default {
         return;
       }
       this.showToast("Preview not supported for this file type");
+    },
+    toggleSlideshow() {
+      if (this.slideshowActive) {
+        this.$emit("slideshow-stop");
+        return;
+      }
+      this.$emit("slideshow-start", this.slideshowSeconds);
+    },
+    onSlideshowSecondsInput(event) {
+      const value = Number(event && event.target ? event.target.value : 0);
+      this.$emit("slideshow-seconds-change", value);
+    },
+    clearSlideshowTimer() {
+      if (this.slideshowTimer) {
+        window.clearTimeout(this.slideshowTimer);
+        this.slideshowTimer = null;
+      }
+    },
+    syncSlideshowTimer() {
+      this.clearSlideshowTimer();
+      if (!this.isOpen || !this.slideshowActive || !this.current || this.current.type !== "image") {
+        return;
+      }
+      const seconds = Math.max(1, Number(this.slideshowSeconds || 5));
+      this.slideshowTimer = window.setTimeout(() => {
+        this.slideshowTimer = null;
+        if (this.index >= this.results.length - 1) {
+          this.$emit("slideshow-finished");
+          return;
+        }
+        this.next();
+      }, seconds * 1000);
     },
     fileName(path) {
       const parts = path.split("/");
@@ -702,6 +780,9 @@ This is reversible from Admin -> Trash.`);
         event.preventDefault();
       }
     }
+  },
+  beforeUnmount() {
+    this.clearSlideshowTimer();
   }
 };
 </script>
@@ -709,6 +790,23 @@ This is reversible from Admin -> Trash.`);
 <style scoped>
 .tag-editor-modal {
   width: min(640px, 92vw);
+}
+
+.viewer-slideshow-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #f4ead7;
+}
+
+.viewer-slideshow-control input {
+  width: 72px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  padding: 6px 8px;
 }
 
 .tag-editor-chips {
