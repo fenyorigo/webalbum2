@@ -315,20 +315,42 @@ This restores SELinux contexts for newly copied files and prevents runtime `500`
   - Run batch: `php backend/bin/assets_worker.php --max-jobs=200` (now exits when queue is empty).
   - Recommended: run via systemd timer.
   - Files: `backend/deploy/systemd/webalbum-assets-worker.service`, `backend/deploy/systemd/webalbum-assets-worker.timer`, `backend/deploy/systemd/assets-worker.env.example`.
+  - macOS setup:
+    - Use `backend/deploy/launchd/com.webalbum.assets-worker.plist.example` for the worker, or run the worker by hand for testing.
+    - For local development, `WA_INDEXER2_ROOT` should point at your local `indexer2` checkout.
+    - `WA_INDEXER2_PYTHON` is optional. If unset, WebAlbum uses `python3`.
+    - `WA_INDEXER2_CONFIG` is optional. If unset, WebAlbum uses `WA_INDEXER2_ROOT/config.yaml`.
+    - Typical local values:
+      - `WA_BACKUP_ROOT=/Users/yourname/path/to/webalbum2/backend/var/backups` or another writable backup location
+      - `WA_INDEXER2_ROOT=/Users/yourname/path/to/indexer2`
+      - `WA_INDEXER2_PYTHON=/usr/bin/python3` or the Python from your virtualenv/toolchain
+      - `WA_INDEXER2_CONFIG=/Users/yourname/path/to/indexer2/config.yaml`
+    - If `indexer2/config.yaml` uses `errors_log_path`, that file must be writable by the same user running the worker. On macOS launchd, that is normally your own user account.
   - Fedora setup:
     - `sudo mkdir -p /etc/webalbum`
     - `sudo cp backend/deploy/systemd/assets-worker.env.example /etc/webalbum/assets-worker.env`
-    - Edit `/etc/webalbum/assets-worker.env` with Fedora paths/DB credentials.
-    - Required worker env vars for tag editing / restore:
+    - Edit `/etc/webalbum/assets-worker.env` with Fedora paths and DB credentials.
+    - Recommended worker env vars for tag editing / restore:
       - `WA_BACKUP_ROOT=/data/photos-backups`
       - `WA_INDEXER2_ROOT=/usr/local/lib/indexer2`
       - `WA_INDEXER2_PYTHON=/usr/bin/python3`
       - `WA_INDEXER2_CONFIG=/usr/local/lib/indexer2/config.yaml`
+    - `WA_INDEXER2_PYTHON` may be omitted if `python3` is already on the service `PATH`.
+    - `WA_INDEXER2_CONFIG` may be omitted if the config file is at `WA_INDEXER2_ROOT/config.yaml`.
     - `sudo cp backend/deploy/systemd/webalbum-assets-worker.service /etc/systemd/system/`
     - `sudo cp backend/deploy/systemd/webalbum-assets-worker.timer /etc/systemd/system/`
     - `sudo systemctl daemon-reload`
     - `sudo systemctl enable --now webalbum-assets-worker.timer`
     - Optional immediate run: `sudo systemctl start webalbum-assets-worker.service --no-block`
+  - Worker execution model:
+    - When you run `indexer2` by hand in a shell, it runs as your current shell user. If you invoke it with `sudo`, it runs as `root`.
+    - When WebAlbum invokes `indexer2`, it inherits the worker service user, not `root`.
+    - In the bundled Fedora systemd unit, the worker runs as `apache:apache`, so the `indexer2` subprocess also runs as `apache:apache`.
+  - Backup and logging requirements:
+    - `WA_BACKUP_ROOT` must be writable by the worker user because WebAlbum stores pre-edit file backups there before applying media tag changes.
+    - If `indexer2/config.yaml` sets `errors_log_path`, that log file and its parent directory must be writable by the worker user.
+    - Example: if Fedora runs the worker as `apache`, then both `WA_BACKUP_ROOT` and the configured `errors_log_path` location must be writable by `apache`.
+    - If you want indexer logs under `/var/log/indexer2`, create the directory first and ensure the service user can write there.
 - Viewer behavior:
   - Audio opens in an HTML5 audio player modal.
   - Documents open in PDF viewer modal (`/api/asset/view`).
@@ -338,7 +360,21 @@ This restores SELinux contexts for newly copied files and prevents runtime `500`
   - `ready` status is set only when the real output file exists and is readable.
   - Placeholder responses are never written as final derivative files.
 - Fedora/SELinux note:
-  - Ensure Apache/PHP worker context can execute `soffice` and write to `WA_THUMBS_ROOT` (and tmp dir used by conversion).
+  - Ensure the Apache/PHP worker context can execute `soffice` and write to `WA_THUMBS_ROOT` and the tmp dir used by conversion.
+  - `WA_BACKUP_ROOT` should be labeled `httpd_sys_rw_content_t` if the worker runs as Apache.
+  - If `indexer2/config.yaml` writes logs to a custom directory such as `/var/log/indexer2`, that directory must also allow Apache writes when the worker invokes `indexer2`.
+  - For a real log directory on Fedora, prefer `httpd_log_t` on `/var/log/indexer2` rather than `httpd_sys_rw_content_t`.
+  - Example:
+
+```bash
+sudo install -d -o apache -g apache -m 0775 /data/photos-backups
+sudo semanage fcontext -a -t httpd_sys_rw_content_t '/data/photos-backups(/.*)?'
+sudo restorecon -Rv /data/photos-backups
+
+sudo install -d -o apache -g apache -m 0775 /var/log/indexer2
+sudo semanage fcontext -a -t httpd_log_t '/var/log/indexer2(/.*)?'
+sudo restorecon -Rv /var/log/indexer2
+```
 
 ### ext filter sanity check
 
