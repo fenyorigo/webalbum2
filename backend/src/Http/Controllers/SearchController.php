@@ -69,13 +69,15 @@ final class SearchController
                 return;
             }
 
-            $mediaResult = $this->searchMedia($sqlite, $maria, $query, $userId, $isAdmin, $hasNotes);
+            $mergeQuery = $this->mergeWindowQuery($query);
+
+            $mediaResult = $this->searchMedia($sqlite, $maria, $mergeQuery, $userId, $isAdmin, $hasNotes);
             if ($requestedType === 'image' || $requestedType === 'video' || $requestedType === 'other') {
                 $this->json($mediaResult);
                 return;
             }
 
-            $assetResult = $this->searchAssetsOnly($maria, $sqlite, $query, null, [], $hasNotes);
+            $assetResult = $this->searchAssetsOnly($maria, $sqlite, $mergeQuery, null, [], $hasNotes);
             $merged = $this->mergeResultSets($mediaResult, $assetResult, $query, (string)$config['photos']['root']);
             $this->json($merged);
         } catch (\JsonException $e) {
@@ -281,6 +283,15 @@ final class SearchController
             'offset' => $offset,
             'limit' => $limit,
         ];
+    }
+
+    private function mergeWindowQuery(array $query): array
+    {
+        $limit = max(1, (int)($query['limit'] ?? 50));
+        $offset = max(0, (int)($query['offset'] ?? 0));
+        $query['limit'] = $limit + $offset;
+        $query['offset'] = 0;
+        return $query;
     }
 
     private function mergeResultSets(array $media, array $assets, array $query, string $photosRoot): array
