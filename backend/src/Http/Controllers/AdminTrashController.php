@@ -7,6 +7,7 @@ namespace WebAlbum\Http\Controllers;
 use WebAlbum\AuditLogMetaCache;
 use WebAlbum\Db\Maria;
 use WebAlbum\Db\SqliteIndex;
+use WebAlbum\Media\MediaTagSupport;
 use WebAlbum\UserContext;
 
 final class AdminTrashController
@@ -579,6 +580,7 @@ final class AdminTrashController
                 "UPDATE wa_media_trash SET status = 'purged', purged_at = NOW(), purged_by_user_id = ?, restored_at = NULL, restored_by_user_id = NULL WHERE id = ? AND status = 'trashed'",
                 [$actorId, (int)$id]
             );
+            $this->cleanupObjectBackup($config, $maria, $relPath, $errors, (int)$id);
             $purged[] = $relPath;
         }
 
@@ -588,6 +590,33 @@ final class AdminTrashController
             'sample' => array_slice($purged, 0, 20),
             'errors' => array_slice($errors, 0, 10),
         ];
+    }
+
+    private function cleanupObjectBackup(array $config, Maria $maria, string $relPath, array &$errors, int $trashId): void
+    {
+        $backupRows = $maria->query(
+            "SELECT id, backup_rel_path FROM wa_object_backups WHERE original_rel_path = ? LIMIT 1",
+            [$relPath]
+        );
+        if ($backupRows === []) {
+            return;
+        }
+
+        $backup = $backupRows[0];
+        $backupId = (int)($backup['id'] ?? 0);
+        if ($backupId < 1) {
+            return;
+        }
+
+        $backupRoot = (string)($config['backups']['root'] ?? '');
+        if ($backupRoot !== '') {
+            $backupPath = MediaTagSupport::backupPath($backupRoot, (string)($backup['backup_rel_path'] ?? ''));
+            if (is_string($backupPath) && is_file($backupPath) && !@unlink($backupPath)) {
+                $errors[] = ['id' => $trashId, 'error' => 'Failed to delete backup file'];
+            }
+        }
+
+        $maria->exec("DELETE FROM wa_object_backups WHERE id = ?", [$backupId]);
     }
 
     private function logBulkAudit(Maria $maria, int $actorId, string $action, array $result): void

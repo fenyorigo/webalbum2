@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace WebAlbum\Http\Controllers;
 
 use WebAlbum\AuditLogMetaCache;
+use WebAlbum\Assets\Jobs;
 use WebAlbum\Db\Maria;
 use WebAlbum\Db\SqliteIndex;
+use WebAlbum\Media\MediaTagEdits;
+use WebAlbum\Media\MediaTagSupport;
 use WebAlbum\UserContext;
 
 final class MediaTagsController
@@ -22,26 +25,26 @@ final class MediaTagsController
     {
         try {
             if ($id < 1) {
-                $this->json(["error" => "Invalid id"], 400);
+                $this->json(['error' => 'Invalid id'], 400);
                 return;
             }
 
-            [$config, $maria, $user] = $this->auth();
+            [$config, $maria, $user] = $this->auth(false);
             if ($user === null) {
                 return;
             }
 
-            $sqlite = new SqliteIndex($config["sqlite"]["path"]);
-            $file = $this->fetchFile($sqlite, $id);
+            $sqlite = new SqliteIndex($config['sqlite']['path']);
+            $file = MediaTagSupport::fetchFile($sqlite, $id);
             if ($file === null) {
-                $this->json(["error" => "Not Found"], 404);
+                $this->json(['error' => 'Not Found'], 404);
                 return;
             }
 
-            $tags = $this->fetchDisplayTags($sqlite, $id);
-            $this->json(["id" => $id, "tags" => $tags]);
+            $tags = MediaTagSupport::fetchDisplayTags($sqlite, $id);
+            $this->json(['id' => $id, 'tags' => $tags]);
         } catch (\Throwable $e) {
-            $this->json(["error" => $e->getMessage()], 400);
+            $this->json(['error' => $e->getMessage()], 400);
         }
     }
 
@@ -49,366 +52,267 @@ final class MediaTagsController
     {
         try {
             if ($id < 1) {
-                $this->json(["error" => "Invalid id"], 400);
+                $this->json(['error' => 'Invalid id'], 400);
                 return;
             }
 
-            [$config, $maria, $user] = $this->auth();
+            [$config, $maria, $user] = $this->auth(true);
             if ($user === null) {
                 return;
             }
-            if ((int)($user["is_admin"] ?? 0) !== 1) {
-                $this->json(["error" => "Forbidden"], 403);
+
+            $body = file_get_contents('php://input');
+            $data = json_decode($body ?: '', true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($data) || !isset($data['tags']) || !is_array($data['tags'])) {
+                throw new \InvalidArgumentException('tags array is required');
+            }
+            $newTags = MediaTagSupport::normalizeTags($data['tags']);
+            $result = $this->queueTagEdit($config, $maria, (int)$user['id'], $id, 'set_tags', null, $newTags);
+            if ($result === null) {
                 return;
             }
-
-            $body = file_get_contents("php://input");
-            $data = json_decode($body ?: "", true, 512, JSON_THROW_ON_ERROR);
-            if (!is_array($data) || !isset($data["tags"]) || !is_array($data["tags"])) {
-                throw new \InvalidArgumentException("tags array is required");
-            }
-            $newTags = $this->normalizeTags($data["tags"]);
-
-            $sqliteRo = new SqliteIndex($config["sqlite"]["path"]);
-            $file = $this->fetchFile($sqliteRo, $id);
-            if ($file === null) {
-                $this->json(["error" => "Not Found"], 404);
-                return;
-            }
-
-            $path = $this->resolveOriginalPath(
-                (string)($file["path"] ?? ""),
-                (string)($file["rel_path"] ?? ""),
-                (string)($config["photos"]["root"] ?? "")
-            );
-            if ($path === null || !is_file($path)) {
-                $this->json(["error" => "File not found"], 404);
-                return;
-            }
-
-            $oldTags = $this->fetchDisplayTags($sqliteRo, $id);
-
-            $exiftool = (string)($config["tools"]["exiftool"] ?? "exiftool");
-            $this->writeTagsWithExiftool($exiftool, $path, $newTags);
-
-            $this->updateSqliteTags((string)$config["sqlite"]["path"], $id, $newTags);
-
-            $this->logAudit(
-                $maria,
-                (int)$user["id"],
-                "media_tag_edit",
-                "web",
-                [
-                    "media_id" => $id,
-                    "path" => $path,
-                    "old_tags" => $oldTags,
-                    "new_tags" => $newTags,
-                ]
-            );
-
-            $this->json([
-                "ok" => true,
-                "id" => $id,
-                "path" => $path,
-                "tags" => $newTags,
-            ]);
+            $this->json($result);
         } catch (\JsonException $e) {
-            $this->json(["error" => "Invalid JSON"], 400);
+            $this->json(['error' => 'Invalid JSON'], 400);
         } catch (\Throwable $e) {
-            $this->json(["error" => $e->getMessage()], 400);
+            $this->json(['error' => $e->getMessage()], 400);
         }
     }
 
-    private function auth(): array
+    public function add(int $id): void
+    {
+        try {
+            if ($id < 1) {
+                $this->json(['error' => 'Invalid id'], 400);
+                return;
+            }
+            [$config, $maria, $user] = $this->auth(true);
+            if ($user === null) {
+                return;
+            }
+            $data = json_decode(file_get_contents('php://input') ?: '', true, 512, JSON_THROW_ON_ERROR);
+            $tag = MediaTagSupport::normalizeTag((string)($data['tag'] ?? ''));
+            $result = $this->queueTagEdit($config, $maria, (int)$user['id'], $id, 'add_tag', $tag, null);
+            if ($result === null) {
+                return;
+            }
+            $this->json($result);
+        } catch (\JsonException $e) {
+            $this->json(['error' => 'Invalid JSON'], 400);
+        } catch (\Throwable $e) {
+            $this->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function remove(int $id): void
+    {
+        try {
+            if ($id < 1) {
+                $this->json(['error' => 'Invalid id'], 400);
+                return;
+            }
+            [$config, $maria, $user] = $this->auth(true);
+            if ($user === null) {
+                return;
+            }
+            $data = json_decode(file_get_contents('php://input') ?: '', true, 512, JSON_THROW_ON_ERROR);
+            $tag = MediaTagSupport::normalizeTag((string)($data['tag'] ?? ''));
+            $result = $this->queueTagEdit($config, $maria, (int)$user['id'], $id, 'remove_tag', $tag, null);
+            if ($result === null) {
+                return;
+            }
+            $this->json($result);
+        } catch (\JsonException $e) {
+            $this->json(['error' => 'Invalid JSON'], 400);
+        } catch (\Throwable $e) {
+            $this->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function restore(int $id): void
+    {
+        try {
+            if ($id < 1) {
+                $this->json(['error' => 'Invalid id'], 400);
+                return;
+            }
+            [$config, $maria, $user] = $this->auth(true);
+            if ($user === null) {
+                return;
+            }
+            $result = $this->queueTagEdit($config, $maria, (int)$user['id'], $id, 'restore_backup', null, null);
+            if ($result === null) {
+                return;
+            }
+            $this->json($result);
+        } catch (\Throwable $e) {
+            $this->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    private function queueTagEdit(array $config, Maria $maria, int $actorId, int $id, string $action, ?string $tagValue, ?array $explicitTags): ?array
+    {
+        $sqlite = new SqliteIndex($config['sqlite']['path']);
+        $file = MediaTagSupport::fetchFile($sqlite, $id);
+        if ($file === null) {
+            $this->json(['error' => 'Not Found'], 404);
+            return null;
+        }
+
+        $type = strtolower(trim((string)($file['type'] ?? '')));
+        if (!in_array($type, ['image', 'video'], true)) {
+            throw new \RuntimeException('Only image and video tag edits are supported');
+        }
+
+        $relPath = (string)($file['rel_path'] ?? '');
+        $path = MediaTagSupport::resolveOriginalPath(
+            (string)($file['path'] ?? ''),
+            $relPath,
+            (string)($config['photos']['root'] ?? '')
+        );
+        if ($path === null || !is_file($path)) {
+            throw new \RuntimeException('File not found');
+        }
+
+        if (MediaTagEdits::hasOpenEdit($maria, $relPath)) {
+            $this->json(['error' => 'An object tag edit is already open for this file'], 409);
+            return null;
+        }
+
+        $currentTags = MediaTagSupport::fetchDisplayTags($sqlite, $id);
+        $targetTags = $this->targetTags($action, $currentTags, $tagValue, $explicitTags);
+        if ($action !== 'restore_backup' && $targetTags === $currentTags) {
+            return [
+                'ok' => true,
+                'queued' => false,
+                'id' => $id,
+                'action' => $action,
+                'tags' => $currentTags,
+                'message' => 'No tag change',
+            ];
+        }
+
+        $objectId = $this->objectIdForSha($maria, (string)($file['sha256'] ?? ''));
+        $backupRelPath = $relPath;
+        $existingBackup = MediaTagEdits::findBackupByRelPath($maria, $relPath);
+        if ($action === 'restore_backup' && $existingBackup === null) {
+            throw new \RuntimeException('No original backup exists for this file');
+        }
+
+        $maria->begin();
+        try {
+            $backup = $action === 'restore_backup'
+                ? $existingBackup
+                : MediaTagEdits::ensureBackupRecord(
+                    $maria,
+                    $relPath,
+                    $backupRelPath,
+                    $objectId,
+                    (string)($file['sha256'] ?? ''),
+                    $actorId
+                );
+            $backupId = (int)($backup['id'] ?? 0);
+            if ($backupId < 1) {
+                throw new \RuntimeException('Failed to create backup record');
+            }
+
+            if ($action === 'restore_backup' && empty($backup['backup_rel_path'])) {
+                throw new \RuntimeException('No backup is registered for this file');
+            }
+
+            $editId = MediaTagEdits::insertEdit(
+                $maria,
+                $backupId,
+                $objectId,
+                $relPath,
+                $action,
+                $tagValue,
+                $currentTags,
+                $action === 'restore_backup' ? null : $targetTags,
+                $actorId
+            );
+            Jobs::enqueue($maria, 'media_tag_edit', [
+                'edit_id' => $editId,
+                'rel_path' => $relPath,
+            ]);
+            $jobRows = $maria->query(
+                "SELECT id FROM wa_jobs WHERE job_type = 'media_tag_edit' AND status IN ('queued','running') AND JSON_EXTRACT(payload_json, '$.edit_id') = ? ORDER BY id DESC LIMIT 1",
+                [$editId]
+            );
+            $jobId = (int)($jobRows[0]['id'] ?? 0);
+            $maria->commit();
+        } catch (\Throwable $e) {
+            $maria->rollBack();
+            throw $e;
+        }
+
+        $this->logAudit($maria, $actorId, 'media_tag_edit_queue', 'web', [
+            'media_id' => $id,
+            'rel_path' => $relPath,
+            'action' => $action,
+            'tag' => $tagValue,
+            'old_tags' => $currentTags,
+            'new_tags' => $targetTags,
+            'edit_id' => $editId,
+            'backup_id' => $backupId,
+            'job_id' => $jobId,
+        ]);
+
+        return [
+            'ok' => true,
+            'queued' => true,
+            'id' => $id,
+            'action' => $action,
+            'edit_id' => $editId,
+            'job_id' => $jobId,
+            'backup_id' => $backupId,
+            'tags' => $action === 'restore_backup' ? $currentTags : $targetTags,
+        ];
+    }
+
+    private function targetTags(string $action, array $currentTags, ?string $tagValue, ?array $explicitTags): array
+    {
+        return match ($action) {
+            'set_tags' => MediaTagSupport::normalizeTags($explicitTags ?? []),
+            'add_tag' => MediaTagSupport::normalizeTags(array_merge($currentTags, [$tagValue ?? ''])),
+            'remove_tag' => MediaTagSupport::normalizeTags(array_values(array_filter(
+                $currentTags,
+                static fn (string $tag): bool => $tag !== $tagValue
+            ))),
+            'restore_backup' => $currentTags,
+            default => throw new \InvalidArgumentException('Unsupported action: ' . $action),
+        };
+    }
+
+    private function objectIdForSha(Maria $maria, string $sha): ?int
+    {
+        $sha = strtolower(trim($sha));
+        if (!preg_match('/^[a-f0-9]{64}$/', $sha)) {
+            return null;
+        }
+        $rows = $maria->query('SELECT id FROM wa_objects WHERE sha256 = ? LIMIT 1', [$sha]);
+        $id = (int)($rows[0]['id'] ?? 0);
+        return $id > 0 ? $id : null;
+    }
+
+    private function auth(bool $adminRequired): array
     {
         $config = require $this->configPath;
         $maria = new Maria(
-            $config["mariadb"]["dsn"],
-            $config["mariadb"]["user"],
-            $config["mariadb"]["pass"]
+            $config['mariadb']['dsn'],
+            $config['mariadb']['user'],
+            $config['mariadb']['pass']
         );
         $user = UserContext::currentUser($maria);
         if ($user === null) {
-            $this->json(["error" => "Not authenticated"], 401);
+            $this->json(['error' => 'Not authenticated'], 401);
+            return [$config, $maria, null];
+        }
+        if ($adminRequired && (int)($user['is_admin'] ?? 0) !== 1) {
+            $this->json(['error' => 'Forbidden'], 403);
+            return [$config, $maria, null];
         }
         return [$config, $maria, $user];
-    }
-
-    private function fetchFile(SqliteIndex $sqlite, int $id): ?array
-    {
-        $rows = $sqlite->query(
-            "SELECT id, path, rel_path, type FROM files WHERE id = ?",
-            [$id]
-        );
-        return $rows[0] ?? null;
-    }
-
-    private function fetchDisplayTags(SqliteIndex $sqlite, int $id): array
-    {
-        $rows = $sqlite->query(
-            "SELECT DISTINCT t.tag\n" .
-            "FROM file_tags ft\n" .
-            "JOIN tags t ON t.id = ft.tag_id\n" .
-            "WHERE ft.file_id = ?\n" .
-            "  AND t.tag <> 'People'\n" .
-            "  AND t.tag NOT LIKE 'People|%'\n" .
-            "ORDER BY LOWER(t.tag) ASC",
-            [$id]
-        );
-        return array_map(fn (array $r): string => (string)$r["tag"], $rows);
-    }
-
-    private function normalizeTags(array $tags): array
-    {
-        $out = [];
-        $seen = [];
-        foreach ($tags as $raw) {
-            if (!is_string($raw)) {
-                throw new \InvalidArgumentException("tags must be strings");
-            }
-            $t = preg_replace('/\s+/u', ' ', trim($raw));
-            $t = is_string($t) ? $t : '';
-            if ($t === '') {
-                throw new \InvalidArgumentException("tags cannot be empty");
-            }
-            $len = function_exists('mb_strlen') ? mb_strlen($t, 'UTF-8') : strlen($t);
-            if ($len > 128) {
-                throw new \InvalidArgumentException("tag too long (max 128)");
-            }
-            if (str_contains($t, '|')) {
-                throw new \InvalidArgumentException("tag must not contain pipe character");
-            }
-            if (!isset($seen[$t])) {
-                $seen[$t] = true;
-                $out[] = $t;
-            }
-        }
-        return $out;
-    }
-
-    private function resolveOriginalPath(string $path, string $relPath, string $photosRoot): ?string
-    {
-        $realRoot = realpath($photosRoot);
-        if ($realRoot === false) {
-            return null;
-        }
-        $rootPrefix = rtrim($realRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-
-        if ($path !== '' && is_file($path)) {
-            $realPath = realpath($path);
-            if ($realPath !== false && str_starts_with($realPath, $rootPrefix)) {
-                return $realPath;
-            }
-        }
-
-        $fallback = $this->safeJoin($photosRoot, $relPath);
-        if ($fallback === null) {
-            return null;
-        }
-        $realFile = realpath($fallback);
-        if ($realFile === false) {
-            return null;
-        }
-        if (!str_starts_with($realFile, $rootPrefix)) {
-            return null;
-        }
-        return $realFile;
-    }
-
-    private function safeJoin(string $root, string $relPath): ?string
-    {
-        if ($root === '' || $relPath === '') {
-            return null;
-        }
-        $rel = str_replace('\\', '/', $relPath);
-        if ($rel === '' || $rel[0] === '/' || str_contains($rel, ':')) {
-            return null;
-        }
-        foreach (explode('/', $rel) as $part) {
-            if ($part === '..') {
-                return null;
-            }
-        }
-        return rtrim($root, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $rel;
-    }
-
-    private function writeTagsWithExiftool(string $exiftoolPath, string $path, array $tags): void
-    {
-        $binary = $this->resolveExiftoolBinary($exiftoolPath);
-        $cmd = [
-            $binary,
-            '-overwrite_original',
-            '-charset',
-            'filename=utf8',
-            '-charset',
-            'iptc=utf8',
-            '-IPTC:Keywords=',
-            '-XMP-dc:Subject=',
-            '-XMP-lr:HierarchicalSubject=',
-        ];
-
-        foreach ($tags as $tag) {
-            $cmd[] = '-IPTC:Keywords=' . $tag;
-            $cmd[] = '-XMP-dc:Subject=' . $tag;
-            $cmd[] = '-XMP-lr:HierarchicalSubject=People|' . $tag;
-        }
-        $cmd[] = $path;
-
-        [$ok, $stdout, $stderr, $timedOut] = $this->runProcess($cmd, 15);
-        if (!$ok) {
-            if ($timedOut) {
-                throw new \RuntimeException('ExifTool timeout while writing tags');
-            }
-            $msg = trim($stderr !== "" ? $stderr : $stdout);
-            if ($msg === "") {
-                $msg = "ExifTool failed to write tags";
-            } else {
-                $msg = str_replace($path, "<media>", $msg);
-            }
-            throw new \RuntimeException($msg);
-        }
-    }
-
-    private function resolveExiftoolBinary(string $configured): string
-    {
-        $configured = trim($configured);
-        if ($configured !== '') {
-            if ($configured === 'exiftool') {
-                foreach (['/opt/homebrew/bin/exiftool', '/usr/local/bin/exiftool', '/usr/bin/exiftool'] as $candidate) {
-                    if (is_file($candidate) && is_executable($candidate)) {
-                        return $candidate;
-                    }
-                }
-                return 'exiftool';
-            }
-            if (is_file($configured) && is_executable($configured)) {
-                return $configured;
-            }
-            throw new \RuntimeException('Configured exiftool binary not found or not executable');
-        }
-
-        foreach (['/opt/homebrew/bin/exiftool', '/usr/local/bin/exiftool', '/usr/bin/exiftool'] as $candidate) {
-            if (is_file($candidate) && is_executable($candidate)) {
-                return $candidate;
-            }
-        }
-        return 'exiftool';
-    }
-
-    private function runProcess(array $cmd, int $timeoutSec): array
-    {
-        $descriptors = [
-            1 => ['pipe', 'w'],
-            2 => ['pipe', 'w'],
-        ];
-        $proc = @proc_open($cmd, $descriptors, $pipes, null, null, ['bypass_shell' => true]);
-        if (!is_resource($proc)) {
-            throw new \RuntimeException('Failed to start exiftool process. Set WA_EXIFTOOL_PATH to full exiftool path.');
-        }
-
-        $stdout = '';
-        $stderr = '';
-        $timedOut = false;
-        foreach ([1, 2] as $idx) {
-            if (isset($pipes[$idx]) && is_resource($pipes[$idx])) {
-                stream_set_blocking($pipes[$idx], false);
-            }
-        }
-
-        $start = microtime(true);
-        while (true) {
-            if (isset($pipes[1]) && is_resource($pipes[1])) {
-                $chunk = stream_get_contents($pipes[1]);
-                if (is_string($chunk) && $chunk !== '') {
-                    $stdout .= $chunk;
-                }
-            }
-            if (isset($pipes[2]) && is_resource($pipes[2])) {
-                $chunk = stream_get_contents($pipes[2]);
-                if (is_string($chunk) && $chunk !== '') {
-                    $stderr .= $chunk;
-                }
-            }
-
-            $status = proc_get_status($proc);
-            if (!$status['running']) {
-                break;
-            }
-
-            if ((microtime(true) - $start) > $timeoutSec) {
-                $timedOut = true;
-                proc_terminate($proc, 9);
-                break;
-            }
-            usleep(100000);
-        }
-
-        foreach ($pipes as $pipe) {
-            if (is_resource($pipe)) {
-                fclose($pipe);
-            }
-        }
-        $exit = proc_close($proc);
-
-        return [$exit === 0 && !$timedOut, $stdout, $stderr, $timedOut];
-    }
-
-    private function updateSqliteTags(string $sqlitePath, int $fileId, array $tags): void
-    {
-        $pdo = new \PDO('sqlite:' . $sqlitePath, null, null, [
-            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-        ]);
-
-        $pdo->beginTransaction();
-        try {
-            $stmtDelete = $pdo->prepare('DELETE FROM file_tags WHERE file_id = ?');
-            $stmtDelete->execute([$fileId]);
-
-            foreach ($tags as $tag) {
-                $tagIds = [
-                    $this->ensureTagId($pdo, $tag, 'keyword', 'iptc'),
-                    $this->ensureTagId($pdo, $tag, 'subject', 'xmp-dc'),
-                    $this->ensureTagId($pdo, $tag, 'person', 'xmp-lr'),
-                    $this->ensureTagId($pdo, 'People|' . $tag, 'hierarchical', 'xmp-lr'),
-                ];
-                foreach ($tagIds as $tagId) {
-                    $this->linkFileTag($pdo, $fileId, $tagId);
-                }
-            }
-
-            if ($tags !== []) {
-                $peopleId = $this->ensureTagId($pdo, 'People', 'category', 'xmp-lr');
-                $this->linkFileTag($pdo, $fileId, $peopleId);
-            }
-
-            $pdo->commit();
-        } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $e;
-        }
-    }
-
-    private function ensureTagId(\PDO $pdo, string $tag, string $kind, string $source): int
-    {
-        $insert = $pdo->prepare('INSERT OR IGNORE INTO tags (tag, kind, source) VALUES (?, ?, ?)');
-        $insert->execute([$tag, $kind, $source]);
-
-        $select = $pdo->prepare('SELECT id FROM tags WHERE tag = ? AND kind = ? AND source = ?');
-        $select->execute([$tag, $kind, $source]);
-        $row = $select->fetch();
-        if (!is_array($row) || !isset($row['id'])) {
-            throw new \RuntimeException('Failed to resolve tag id');
-        }
-        return (int)$row['id'];
-    }
-
-    private function linkFileTag(\PDO $pdo, int $fileId, int $tagId): void
-    {
-        $insert = $pdo->prepare('INSERT OR IGNORE INTO file_tags (file_id, tag_id) VALUES (?, ?)');
-        $insert->execute([$fileId, $tagId]);
     }
 
     private function logAudit(Maria $db, int $actorId, string $action, string $source, ?array $details = null): void

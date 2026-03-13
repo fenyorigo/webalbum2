@@ -87,4 +87,96 @@ final class ObjectSyncService
             'orphaned_total' => $orphans,
         ];
     }
+
+    public function syncMediaRelPath(SqliteIndex $sqlite, Maria $maria, string $relPath, ?string $previousSha = null): array
+    {
+        $relPath = trim($relPath);
+        if ($relPath === '') {
+            throw new \InvalidArgumentException('relPath is required');
+        }
+
+        $rows = $sqlite->query(
+            "SELECT LOWER(sha256) AS sha256
+             FROM files
+             WHERE rel_path = ?
+               AND type IN ('image','video')
+             ORDER BY id ASC
+             LIMIT 1",
+            [$relPath]
+        );
+        if ($rows === []) {
+            throw new \RuntimeException('SQLite file row not found for rel_path: ' . $relPath);
+        }
+
+        $newSha = strtolower(trim((string)($rows[0]['sha256'] ?? '')));
+        if (!preg_match('/^[a-f0-9]{64}$/', $newSha)) {
+            throw new \RuntimeException('SQLite file row has invalid sha256 for rel_path: ' . $relPath);
+        }
+
+        $oldSha = strtolower(trim((string)($previousSha ?? '')));
+        if (!preg_match('/^[a-f0-9]{64}$/', $oldSha)) {
+            $oldSha = '';
+        }
+
+        $maria->begin();
+        try {
+            $maria->exec(
+                "INSERT INTO wa_objects (sha256, status, first_seen_at, last_seen_at, orphaned_at, last_synced_at)
+                 VALUES (?, 'active', NOW(), NOW(), NULL, NOW())
+                 ON DUPLICATE KEY UPDATE
+                   status = 'active',
+                   orphaned_at = NULL,
+                   last_seen_at = NOW(),
+                   last_synced_at = NOW()",
+                [$newSha]
+            );
+
+            $newObjectRows = $maria->query("SELECT id FROM wa_objects WHERE sha256 = ? LIMIT 1", [$newSha]);
+            $newObjectId = (int)($newObjectRows[0]['id'] ?? 0);
+
+            if ($oldSha !== '' && $oldSha !== $newSha) {
+                $remainingRows = $sqlite->query(
+                    "SELECT COUNT(*) AS c
+                     FROM files
+                     WHERE sha256 IS NOT NULL
+                       AND LOWER(sha256) = ?",
+                    [$oldSha]
+                );
+                $remaining = (int)($remainingRows[0]['c'] ?? 0);
+                if ($remaining === 0) {
+                    $maria->exec(
+                        "UPDATE wa_objects
+                         SET status = 'orphaned',
+                             orphaned_at = IF(orphaned_at IS NULL, NOW(), orphaned_at),
+                             last_synced_at = NOW()
+                         WHERE sha256 = ?
+                           AND status = 'active'",
+                        [$oldSha]
+                    );
+                } else {
+                    $maria->exec(
+                        "UPDATE wa_objects
+                         SET status = 'active',
+                             orphaned_at = NULL,
+                             last_seen_at = NOW(),
+                             last_synced_at = NOW()
+                         WHERE sha256 = ?",
+                        [$oldSha]
+                    );
+                }
+            }
+
+            $maria->commit();
+        } catch (\Throwable $e) {
+            $maria->rollBack();
+            throw $e;
+        }
+
+        return [
+            'rel_path' => $relPath,
+            'object_id' => $newObjectId,
+            'old_sha256' => $oldSha !== '' ? $oldSha : null,
+            'new_sha256' => $newSha,
+        ];
+    }
 }

@@ -7,6 +7,10 @@ use WebAlbum\Assets\AssetSupport;
 use WebAlbum\Assets\Jobs;
 use WebAlbum\Assets\ObjectTransformJobs;
 use WebAlbum\Db\Maria;
+use WebAlbum\Db\SqliteIndex;
+use WebAlbum\Media\MediaTagEdits;
+use WebAlbum\Media\MediaTagSupport;
+use WebAlbum\ObjectSyncService;
 use WebAlbum\SystemTools;
 use WebAlbum\Thumb\ThumbPolicy;
 
@@ -72,8 +76,10 @@ while (true) {
         }
         echo "done {$queue} job #{$jobId} ({$job['job_type']})\n";
     } catch (Throwable $e) {
+        $nonRetry = str_starts_with($e->getMessage(), 'NON_RETRY:');
         if ($queue === 'assets') {
-            Jobs::markError($db, $jobId, $e->getMessage(), $attempts);
+            Jobs::markError($db, $jobId, $e->getMessage(), $nonRetry ? 999 : $attempts);
+            markOpenMediaTagEditErrored($db, $job, $nonRetry ? 999 : $attempts, $e->getMessage());
         } else {
             ObjectTransformJobs::markError($db, $jobId, $e->getMessage(), $attempts);
         }
@@ -89,6 +95,12 @@ function processJob(Maria $db, array $config, array $job): void
 {
     $type = (string)$job['job_type'];
     $payload = is_array($job['payload']) ? $job['payload'] : [];
+
+    if ($type === 'media_tag_edit') {
+        processMediaTagEditJob($db, $config, $job);
+        return;
+    }
+
     $assetId = (int)($payload['asset_id'] ?? 0);
     if ($assetId < 1) {
         throw new RuntimeException('Missing asset_id in payload');
@@ -235,6 +247,259 @@ function buildDocThumb(Maria $db, array $config, int $assetId, array $asset, str
         "ON DUPLICATE KEY UPDATE path = VALUES(path), status = 'ready', error_text = NULL, updated_at = NOW()",
         [$assetId, $target]
     );
+}
+
+function processMediaTagEditJob(Maria $db, array $config, array $job): void
+{
+    $payload = is_array($job['payload'] ?? null) ? $job['payload'] : [];
+    $editId = (int)($payload['edit_id'] ?? 0);
+    if ($editId < 1) {
+        throw new RuntimeException('Missing edit_id in media_tag_edit payload');
+    }
+
+    $edit = MediaTagEdits::getEditById($db, $editId);
+    if ($edit === null) {
+        throw new RuntimeException('Tag edit not found');
+    }
+    if ((string)($edit['status'] ?? '') !== 'open') {
+        return;
+    }
+
+    $relPath = (string)($edit['rel_path'] ?? '');
+    if ($relPath === '') {
+        throw new RuntimeException('Tag edit rel_path is missing');
+    }
+
+    $photosRoot = (string)($config['photos']['root'] ?? '');
+    $sourcePath = MediaTagSupport::safeJoin($photosRoot, $relPath);
+    if ($sourcePath === null || !is_file($sourcePath) || !is_readable($sourcePath)) {
+        throw new RuntimeException('Source file is missing for rel_path: ' . $relPath);
+    }
+
+    $sqlite = new SqliteIndex((string)($config['sqlite']['path'] ?? ''));
+    $beforeFile = MediaTagSupport::fetchFileByRelPath($sqlite, $relPath);
+    if ($beforeFile === null) {
+        throw new RuntimeException('SQLite file row not found for rel_path: ' . $relPath);
+    }
+    $beforeSha = strtolower(trim((string)($beforeFile['sha256'] ?? '')));
+    $beforeTags = MediaTagSupport::fetchDisplayTags($sqlite, (int)$beforeFile['id']);
+
+    ensureObjectBackupExists($db, $config, $edit, $sourcePath);
+
+    $action = (string)($edit['action_type'] ?? '');
+    if ($action === 'restore_backup') {
+        restoreObjectBackup($config, $edit, $sourcePath);
+    } else {
+        $newTags = decodeTagJson((string)($edit['new_tags_json'] ?? ''));
+        MediaTagSupport::writeTagsWithExiftool((string)($config['tools']['exiftool'] ?? 'exiftool'), $sourcePath, $newTags);
+    }
+
+    reindexSingleMediaFile($config, $relPath);
+
+    $sqliteAfter = new SqliteIndex((string)($config['sqlite']['path'] ?? ''));
+    $sync = (new ObjectSyncService())->syncMediaRelPath($sqliteAfter, $db, $relPath, $beforeSha);
+    $afterFile = MediaTagSupport::fetchFileByRelPath($sqliteAfter, $relPath);
+    if ($afterFile === null) {
+        throw new RuntimeException('SQLite file row missing after refresh');
+    }
+    $afterTags = MediaTagSupport::fetchDisplayTags($sqliteAfter, (int)$afterFile['id']);
+
+    MediaTagEdits::markBackupReady($db, (int)($edit['backup_id'] ?? 0), (int)($sync['object_id'] ?? 0));
+    MediaTagEdits::markEditApplied(
+        $db,
+        $editId,
+        $action === 'restore_backup' ? 'restored' : 'final',
+        (int)($sync['object_id'] ?? 0),
+        (string)($sync['new_sha256'] ?? '')
+    );
+
+    $db->exec(
+        "UPDATE wa_object_tag_edits SET old_tags_json = ?, new_tags_json = ? WHERE id = ?",
+        [
+            json_encode(array_values($beforeTags), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            $action === 'restore_backup'
+                ? json_encode(array_values($afterTags), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                : (string)($edit['new_tags_json'] ?? '[]'),
+            $editId,
+        ]
+    );
+
+    @error_log('webalbum_media_tag_edit ' . json_encode([
+        'edit_id' => $editId,
+        'action' => $action,
+        'rel_path' => $relPath,
+        'old_sha256' => $sync['old_sha256'] ?? null,
+        'new_sha256' => $sync['new_sha256'] ?? null,
+        'old_tags' => $beforeTags,
+        'new_tags' => $afterTags,
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+}
+
+function ensureObjectBackupExists(Maria $db, array $config, array $edit, string $sourcePath): void
+{
+    $backupId = (int)($edit['backup_id'] ?? 0);
+    if ($backupId < 1) {
+        throw new RuntimeException('Tag edit backup record is missing');
+    }
+    $backupRoot = (string)($config['backups']['root'] ?? '');
+    if ($backupRoot === '') {
+        throw new RuntimeException('Backup root is not configured');
+    }
+    $backupPath = MediaTagSupport::backupPath($backupRoot, (string)($edit['backup_rel_path'] ?? ''));
+    if ($backupPath === null) {
+        throw new RuntimeException('Backup path is invalid');
+    }
+
+    if (is_file($backupPath) && is_readable($backupPath) && (string)($edit['backup_status'] ?? '') === 'ready') {
+        return;
+    }
+
+    try {
+        MediaTagSupport::copyFileAtomic($sourcePath, $backupPath);
+        MediaTagEdits::markBackupReady($db, $backupId, isset($edit['object_id']) ? (int)$edit['object_id'] : null);
+    } catch (Throwable $e) {
+        MediaTagEdits::markBackupError($db, $backupId, $e->getMessage());
+        throw $e;
+    }
+}
+
+function restoreObjectBackup(array $config, array $edit, string $sourcePath): void
+{
+    $backupRoot = (string)($config['backups']['root'] ?? '');
+    if ($backupRoot === '') {
+        throw new RuntimeException('Backup root is not configured');
+    }
+    $backupPath = MediaTagSupport::backupPath($backupRoot, (string)($edit['backup_rel_path'] ?? ''));
+    if ($backupPath === null || !is_file($backupPath) || !is_readable($backupPath)) {
+        throw new RuntimeException('Backup file is missing');
+    }
+    MediaTagSupport::copyFileAtomic($backupPath, $sourcePath);
+}
+
+function decodeTagJson(string $json): array
+{
+    $decoded = json_decode($json, true);
+    if (!is_array($decoded)) {
+        throw new RuntimeException('Tag edit payload has invalid tags JSON');
+    }
+    return MediaTagSupport::normalizeTags($decoded);
+}
+
+function reindexSingleMediaFile(array $config, string $relPath): void
+{
+    $sqlitePath = (string)($config['sqlite']['path'] ?? '');
+    $photosRoot = (string)($config['photos']['root'] ?? '');
+    $indexerRoot = (string)($config['indexer']['root'] ?? '');
+    $python = (string)($config['indexer']['python'] ?? 'python3');
+    $configPath = trim((string)($config['indexer']['config_path'] ?? ''));
+    if ($configPath === '') {
+        $configPath = rtrim($indexerRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'config.yaml';
+    }
+
+    if ($sqlitePath === '' || !is_file($sqlitePath)) {
+        throw new RuntimeException('SQLite DB not found for reindex');
+    }
+    if ($photosRoot === '' || !is_dir($photosRoot)) {
+        throw new RuntimeException('Photos root is not available for reindex');
+    }
+    if ($indexerRoot === '' || !is_dir($indexerRoot)) {
+        throw new RuntimeException('Indexer root is not configured or missing');
+    }
+    if (!is_file($configPath)) {
+        throw new RuntimeException('Indexer config.yaml not found: ' . $configPath);
+    }
+
+    $cmd = [
+        $python,
+        '-m', 'app',
+        '--cli',
+        '--db', $sqlitePath,
+        '--root', $photosRoot,
+        '--config', $configPath,
+        '--refresh-file', $relPath,
+        '--json',
+        '--no-progress',
+    ];
+
+    [$ok, $stdout, $stderr, $timedOut] = runProcessWithTimeout($cmd, $indexerRoot, 180);
+    if (!$ok) {
+        if ($timedOut) {
+            throw new RuntimeException('Indexer single-file refresh timed out');
+        }
+        $msg = trim($stderr !== '' ? $stderr : $stdout);
+        if ($msg === '') {
+            $msg = 'Indexer single-file refresh failed';
+        }
+        throw new RuntimeException($msg);
+    }
+}
+
+function runProcessWithTimeout(array $cmd, ?string $cwd, int $timeoutSec): array
+{
+    $descriptors = [
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    $proc = @proc_open($cmd, $descriptors, $pipes, $cwd, null, ['bypass_shell' => true]);
+    if (!is_resource($proc)) {
+        throw new RuntimeException('Failed to start child process');
+    }
+
+    $stdout = '';
+    $stderr = '';
+    $timedOut = false;
+    foreach ([1, 2] as $idx) {
+        if (isset($pipes[$idx]) && is_resource($pipes[$idx])) {
+            stream_set_blocking($pipes[$idx], false);
+        }
+    }
+
+    $start = microtime(true);
+    while (true) {
+        if (isset($pipes[1]) && is_resource($pipes[1])) {
+            $chunk = stream_get_contents($pipes[1]);
+            if (is_string($chunk) && $chunk !== '') {
+                $stdout .= $chunk;
+            }
+        }
+        if (isset($pipes[2]) && is_resource($pipes[2])) {
+            $chunk = stream_get_contents($pipes[2]);
+            if (is_string($chunk) && $chunk !== '') {
+                $stderr .= $chunk;
+            }
+        }
+
+        $status = proc_get_status($proc);
+        if (!$status['running']) {
+            break;
+        }
+        if ((microtime(true) - $start) > $timeoutSec) {
+            $timedOut = true;
+            proc_terminate($proc, 9);
+            break;
+        }
+        usleep(100000);
+    }
+
+    foreach ($pipes as $pipe) {
+        if (is_resource($pipe)) {
+            fclose($pipe);
+        }
+    }
+    $exit = proc_close($proc);
+    return [$exit === 0 && !$timedOut, $stdout, $stderr, $timedOut];
+}
+
+function markOpenMediaTagEditErrored(Maria $db, array $job, int $attempts, string $error): void
+{
+    if ((string)($job['job_type'] ?? '') !== 'media_tag_edit' || $attempts < 8) {
+        return;
+    }
+    $payload = is_array($job['payload'] ?? null) ? $job['payload'] : [];
+    $editId = (int)($payload['edit_id'] ?? 0);
+    if ($editId > 0) {
+        MediaTagEdits::markEditError($db, $editId, $error);
+    }
 }
 
 function processObjectTransformJob(Maria $db, array $config, array $job): void

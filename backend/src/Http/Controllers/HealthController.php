@@ -11,7 +11,7 @@ use WebAlbum\UserContext;
 
 final class HealthController
 {
-    private const VERSION = "webalbum 2.0.1";
+    private const VERSION = "webalbum 2.1.0";
 
     private string $configPath;
 

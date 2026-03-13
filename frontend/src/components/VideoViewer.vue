@@ -148,6 +148,7 @@
         </div>
         <div class="modal-actions">
           <button class="inline" @click="saveEditTags" :disabled="editLoading">Save</button>
+          <button class="inline" @click="restoreOriginalTags" :disabled="editLoading">Restore original</button>
           <button class="inline" @click="closeEditor" :disabled="editLoading">Cancel</button>
         </div>
         <p v-if="editError" class="error">{{ editError }}</p>
@@ -664,12 +665,39 @@ export default {
         const tags = Array.isArray(data.tags) ? data.tags : normalized;
         this.tagsById = { ...this.tagsById, [this.current.id]: tags };
         this.closeEditor();
-        this.toast = "Tags saved. Reindex later to propagate to all searches.";
+        this.toast = "Tag edit queued.";
         setTimeout(() => {
           this.toast = "";
         }, 2500);
       } catch (_e) {
         this.editError = "Failed to save tags";
+      } finally {
+        this.editLoading = false;
+      }
+    },
+    async restoreOriginalTags() {
+      if (!this.current) {
+        return;
+      }
+      this.editLoading = true;
+      this.editError = "";
+      try {
+        const res = await fetch(`/api/admin/media/${this.current.id}/tags/restore`, {
+          method: "POST"
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.editError = data.error || "Failed to restore original tags";
+          this.editLoading = false;
+          return;
+        }
+        this.closeEditor();
+        this.toast = "Original tag restore queued.";
+        setTimeout(() => {
+          this.toast = "";
+        }, 2500);
+      } catch (_e) {
+        this.editError = "Failed to restore original tags";
       } finally {
         this.editLoading = false;
       }

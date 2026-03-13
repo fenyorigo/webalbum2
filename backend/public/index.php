@@ -388,6 +388,18 @@ if ($method === "POST" && preg_match("#^/api/media/(\\d+)/tags$#", $path, $m)) {
     (new MediaTagsController($root . "/config/config.php"))->save((int)$m[1]);
     exit;
 }
+if ($method === "POST" && preg_match("#^/api/admin/media/(\d+)/tags/add$#", $path, $m)) {
+    (new MediaTagsController($root . "/config/config.php"))->add((int)$m[1]);
+    exit;
+}
+if ($method === "POST" && preg_match("#^/api/admin/media/(\d+)/tags/remove$#", $path, $m)) {
+    (new MediaTagsController($root . "/config/config.php"))->remove((int)$m[1]);
+    exit;
+}
+if ($method === "POST" && preg_match("#^/api/admin/media/(\d+)/tags/restore$#", $path, $m)) {
+    (new MediaTagsController($root . "/config/config.php"))->restore((int)$m[1]);
+    exit;
+}
 if ($method === "GET" && preg_match("#^/api/file/(\\d+)$#", $path, $m)) {
     (new FileController($root . "/config/config.php"))->handle((int)$m[1]);
     exit;

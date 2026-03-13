@@ -1,0 +1,40 @@
+CREATE TABLE IF NOT EXISTS wa_object_backups (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  object_id BIGINT NULL,
+  original_sha256 CHAR(64) NULL,
+  original_rel_path VARCHAR(1024) NOT NULL,
+  backup_rel_path VARCHAR(1024) NOT NULL,
+  status ENUM('pending','ready','deleted','error') NOT NULL DEFAULT 'pending',
+  created_by_user_id INT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  last_error TEXT NULL,
+  UNIQUE KEY uniq_wa_object_backups_rel_path (original_rel_path(512)),
+  CONSTRAINT fk_wa_object_backups_object FOREIGN KEY (object_id) REFERENCES wa_objects(id) ON DELETE SET NULL,
+  CONSTRAINT fk_wa_object_backups_created_by FOREIGN KEY (created_by_user_id) REFERENCES wa_users(id) ON DELETE SET NULL,
+  INDEX idx_wa_object_backups_status (status)
+);
+
+CREATE TABLE IF NOT EXISTS wa_object_tag_edits (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  backup_id BIGINT NULL,
+  object_id BIGINT NULL,
+  rel_path VARCHAR(1024) NOT NULL,
+  action_type ENUM('add_tag','remove_tag','set_tags','restore_backup') NOT NULL,
+  tag_value VARCHAR(255) NULL,
+  old_tags_json JSON NULL,
+  new_tags_json JSON NULL,
+  resulting_sha256 CHAR(64) NULL,
+  status ENUM('open','final','restored','error') NOT NULL DEFAULT 'open',
+  created_by_user_id INT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  applied_at DATETIME NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  last_error TEXT NULL,
+  CONSTRAINT fk_wa_object_tag_edits_backup FOREIGN KEY (backup_id) REFERENCES wa_object_backups(id) ON DELETE SET NULL,
+  CONSTRAINT fk_wa_object_tag_edits_object FOREIGN KEY (object_id) REFERENCES wa_objects(id) ON DELETE SET NULL,
+  CONSTRAINT fk_wa_object_tag_edits_created_by FOREIGN KEY (created_by_user_id) REFERENCES wa_users(id) ON DELETE SET NULL,
+  INDEX idx_wa_object_tag_edits_rel_path_status (rel_path(512), status),
+  INDEX idx_wa_object_tag_edits_object_created (object_id, created_at),
+  INDEX idx_wa_object_tag_edits_status_created (status, created_at)
+);

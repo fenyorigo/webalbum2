@@ -36,4 +36,30 @@ final class Maria
         $stmt->execute($params);
         return $stmt->rowCount();
     }
+
+    public function begin(): void
+    {
+        if (!$this->pdo->inTransaction()) {
+            $this->pdo->beginTransaction();
+        }
+    }
+
+    public function commit(): void
+    {
+        if ($this->pdo->inTransaction()) {
+            $this->pdo->commit();
+        }
+    }
+
+    public function rollBack(): void
+    {
+        if ($this->pdo->inTransaction()) {
+            $this->pdo->rollBack();
+        }
+    }
+
+    public function lastInsertId(): int
+    {
+        return (int)$this->pdo->lastInsertId();
+    }
 }

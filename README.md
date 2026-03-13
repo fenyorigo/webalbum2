@@ -4,7 +4,7 @@ Backend and frontend for browsing an indexer-produced SQLite database (read-only
 
 ## Release
 
-- Current version: `2.0.1`
+- Current version: `2.1.0`
 - See `CHANGELOG.md` for release notes.
 
 ## Backend
@@ -48,6 +48,12 @@ Backend and frontend for browsing an indexer-produced SQLite database (read-only
 `GET /api/media/{id}/tags`
 
 `POST /api/media/{id}/tags` (admin only, body: `{"tags":["András","Gergely"]}`)
+
+`POST /api/admin/media/{id}/tags/add` (admin only, body: `{"tag":"..."}`)
+
+`POST /api/admin/media/{id}/tags/remove` (admin only, body: `{"tag":"..."}`)
+
+`POST /api/admin/media/{id}/tags/restore` (admin only)
 
 Request body:
 
@@ -313,6 +319,11 @@ This restores SELinux contexts for newly copied files and prevents runtime `500`
     - `sudo mkdir -p /etc/webalbum`
     - `sudo cp backend/deploy/systemd/assets-worker.env.example /etc/webalbum/assets-worker.env`
     - Edit `/etc/webalbum/assets-worker.env` with Fedora paths/DB credentials.
+    - Required worker env vars for tag editing / restore:
+      - `WA_BACKUP_ROOT=/data/photos-backups`
+      - `WA_INDEXER2_ROOT=/usr/local/lib/indexer2`
+      - `WA_INDEXER2_PYTHON=/usr/bin/python3`
+      - `WA_INDEXER2_CONFIG=/usr/local/lib/indexer2/config.yaml`
     - `sudo cp backend/deploy/systemd/webalbum-assets-worker.service /etc/systemd/system/`
     - `sudo cp backend/deploy/systemd/webalbum-assets-worker.timer /etc/systemd/system/`
     - `sudo systemctl daemon-reload`

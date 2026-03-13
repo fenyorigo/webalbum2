@@ -25,6 +25,14 @@
     <string>__WA_PHOTOS_ROOT__</string>
     <key>WA_THUMBS_ROOT</key>
     <string>__WA_THUMBS_ROOT__</string>
+    <key>WA_BACKUP_ROOT</key>
+    <string>__WA_BACKUP_ROOT__</string>
+    <key>WA_INDEXER2_ROOT</key>
+    <string>__WA_INDEXER2_ROOT__</string>
+    <key>WA_INDEXER2_PYTHON</key>
+    <string>__WA_INDEXER2_PYTHON__</string>
+    <key>WA_INDEXER2_CONFIG</key>
+    <string>__WA_INDEXER2_CONFIG__</string>
     <key>WEBALBUM_DB_NAME</key>
     <string>webalbum2</string>
     <key>WA_DB_NAME</key>
