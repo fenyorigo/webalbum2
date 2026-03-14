@@ -3,6 +3,6 @@ frontend/dist/
 backend/public/dist/
 .DS_Store
 backend/config/config.php
-backend/var/setup.lock
+backend/var/
 backend/public/_pool_health.php
 config.php
