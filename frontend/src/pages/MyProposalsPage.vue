@@ -1,23 +1,23 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1>My Proposals</h1>
-      <p>Your submitted object change proposals.</p>
+      <h1>{{ $t("proposals.title", "My Proposals") }}</h1>
+      <p>{{ $t("proposals.description", "Your submitted object change proposals.") }}</p>
     </header>
 
     <section class="panel">
       <div class="row">
         <label>
-          Status
+          {{ $t("object.status", "Status") }}
           <select v-model="status" @change="load">
-            <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-            <option value="cancelled">Cancelled</option>
+            <option value="all">{{ $t("status.all", "All") }}</option>
+            <option value="pending">{{ $t("status.pending", "Pending") }}</option>
+            <option value="approved">{{ $t("status.approved", "Approved") }}</option>
+            <option value="rejected">{{ $t("status.rejected", "Rejected") }}</option>
+            <option value="cancelled">{{ $t("status.cancelled", "Cancelled") }}</option>
           </select>
         </label>
-        <button type="button" class="inline" @click="load" :disabled="loading">Refresh</button>
+        <button type="button" class="inline" @click="load" :disabled="loading">{{ $t("ui.refresh", "Refresh") }}</button>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
     </section>
@@ -26,12 +26,12 @@
       <table class="results-table" v-if="items.length">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>SHA</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th>Created</th>
-            <th>Action</th>
+            <th>{{ $t("common.id", "ID") }}</th>
+            <th>{{ $t("object.sha", "SHA") }}</th>
+            <th>{{ $t("common.type", "Type") }}</th>
+            <th>{{ $t("object.status", "Status") }}</th>
+            <th>{{ $t("object.created", "Created") }}</th>
+            <th>{{ $t("object.action", "Action") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -49,21 +49,23 @@
                 @click="cancelProposal(row.id)"
                 :disabled="loading"
               >
-                Cancel
+                {{ $t("ui.cancel", "Cancel") }}
               </button>
               <router-link class="inline-link" :to="{ path: '/object', query: { sha256: row.sha256 } }">
-                Open object
+                {{ $t("object.open", "Open object") }}
               </router-link>
             </td>
           </tr>
         </tbody>
       </table>
-      <p v-else class="muted">No proposals in this filter.</p>
+      <p v-else class="muted">{{ $t("proposals.empty", "No proposals in this filter.") }}</p>
     </section>
   </div>
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "MyProposalsPage",
   data() {
@@ -92,18 +94,18 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to load proposals";
+          this.error = apiErrorMessage(data.error, "proposals.load_failed", "Failed to load proposals");
           return;
         }
         this.items = Array.isArray(data.items) ? data.items : [];
       } catch (_e) {
-        this.error = "Failed to load proposals";
+        this.error = this.$t("proposals.load_failed", "Failed to load proposals");
       } finally {
         this.loading = false;
       }
     },
     async cancelProposal(id) {
-      if (!window.confirm(`Cancel proposal #${id}?`)) {
+      if (!window.confirm(this.$t("proposals.cancel_confirm", { id }, "Cancel proposal #{id}?"))) {
         return;
       }
       this.loading = true;
@@ -112,12 +114,12 @@ export default {
         const res = await fetch(`/api/objects/proposals/${id}/cancel`, { method: "POST" });
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to cancel proposal";
+          this.error = apiErrorMessage(data.error, "proposals.cancel_failed", "Failed to cancel proposal");
           return;
         }
         await this.load();
       } catch (_e) {
-        this.error = "Failed to cancel proposal";
+        this.error = this.$t("proposals.cancel_failed", "Failed to cancel proposal");
       } finally {
         this.loading = false;
       }

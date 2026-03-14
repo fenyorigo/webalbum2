@@ -1,28 +1,28 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1>Saved searches</h1>
-      <p>Manage your saved search presets.</p>
+      <h1>{{ $t("saved_searches.title", "Saved searches") }}</h1>
+      <p>{{ $t("saved_searches.manage", "Manage your saved search presets.") }}</p>
     </header>
 
     <section class="panel">
       <div class="row">
-        <button class="inline" :disabled="loading" @click="fetchSaved">Refresh</button>
+        <button class="inline" :disabled="loading" @click="fetchSaved">{{ $t("ui.refresh", "Refresh") }}</button>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
     </section>
 
     <section class="results">
       <div class="meta">
-        <span v-if="loading">Loading…</span>
-        <span v-else-if="rows.length === 0">No saved searches yet.</span>
+        <span v-if="loading">{{ $t("common.loading", "Loading...") }}</span>
+        <span v-else-if="rows.length === 0">{{ $t("saved_searches.empty", "No saved searches yet.") }}</span>
       </div>
       <table class="tags-table" v-if="rows.length">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Updated</th>
-            <th>Actions</th>
+            <th>{{ $t("common.name", "Name") }}</th>
+            <th>{{ $t("saved_search.updated", "Updated") }}</th>
+            <th>{{ $t("object.action", "Action") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -30,10 +30,10 @@
             <td class="tag">{{ row.name }}</td>
             <td>{{ formatDate(row.updated_at) }}</td>
             <td class="actions">
-              <button class="inline" @click="runSaved(row)">Run</button>
-              <button class="inline" @click="loadSaved(row)">Load</button>
-              <button class="inline" @click="openRename(row)">Rename</button>
-              <button class="inline" @click="openDelete(row)">Delete</button>
+              <button class="inline" @click="runSaved(row)">{{ $t("saved_search.run", "Run") }}</button>
+              <button class="inline" @click="loadSaved(row)">{{ $t("saved_search.load", "Load") }}</button>
+              <button class="inline" @click="openRename(row)">{{ $t("saved_search.rename", "Rename") }}</button>
+              <button class="inline" @click="openDelete(row)">{{ $t("saved_search.delete", "Delete") }}</button>
             </td>
           </tr>
         </tbody>
@@ -42,14 +42,14 @@
 
     <div v-if="renameOpen" class="modal-backdrop" @click.self="closeRename">
       <div class="modal">
-        <h3>Rename saved search</h3>
+        <h3>{{ $t("saved_search.rename_title", "Rename saved search") }}</h3>
         <label>
-          Name
+          {{ $t("common.name", "Name") }}
           <input v-model.trim="renameName" type="text" />
         </label>
         <div class="modal-actions">
-          <button class="inline" @click="submitRename" :disabled="loading">Save</button>
-          <button class="inline" @click="closeRename" :disabled="loading">Cancel</button>
+          <button class="inline" @click="submitRename" :disabled="loading">{{ $t("ui.save", "Save") }}</button>
+          <button class="inline" @click="closeRename" :disabled="loading">{{ $t("ui.cancel", "Cancel") }}</button>
         </div>
         <p v-if="modalError" class="error">{{ modalError }}</p>
       </div>
@@ -57,11 +57,11 @@
 
     <div v-if="deleteOpen" class="modal-backdrop" @click.self="closeDelete">
       <div class="modal">
-        <h3>Delete saved search</h3>
-        <p>Delete “{{ deleteTarget && deleteTarget.name }}”?</p>
+        <h3>{{ $t("saved_search.delete_title", "Delete saved search") }}</h3>
+        <p>{{ $t("saved_search.delete_confirm", { name: deleteTarget && deleteTarget.name }, 'Delete "{name}"?') }}</p>
         <div class="modal-actions">
-          <button class="inline" @click="confirmDelete" :disabled="loading">Delete</button>
-          <button class="inline" @click="closeDelete" :disabled="loading">Cancel</button>
+          <button class="inline" @click="confirmDelete" :disabled="loading">{{ $t("common.delete", "Delete") }}</button>
+          <button class="inline" @click="closeDelete" :disabled="loading">{{ $t("ui.cancel", "Cancel") }}</button>
         </div>
       </div>
     </div>
@@ -71,6 +71,8 @@
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "SavedSearchesPage",
   data() {
@@ -101,7 +103,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to load saved searches";
+          this.error = apiErrorMessage(data.error, "saved_search.load_failed", "Failed to load saved searches");
           this.rows = [];
           return;
         }
@@ -140,7 +142,7 @@ export default {
       }
       const name = this.renameName.trim();
       if (!name) {
-        this.modalError = "Name is required";
+        this.modalError = this.$t("saved_search.name_required", "Name is required");
         return;
       }
       this.loading = true;
@@ -156,14 +158,14 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.modalError = data.message || data.error || "Rename failed";
+          this.modalError = apiErrorMessage(data.message || data.error, "saved_search.rename_failed", "Rename failed");
           return;
         }
         this.renameTarget.name = name;
         this.closeRename();
         await this.fetchSaved();
       } catch (err) {
-        this.modalError = "Rename failed";
+        this.modalError = this.$t("saved_search.rename_failed", "Rename failed");
       } finally {
         this.loading = false;
       }
@@ -190,13 +192,13 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.showToast(data.error || "Delete failed");
+          this.showToast(apiErrorMessage(data.error, "saved_search.delete_failed", "Delete failed"));
           return;
         }
         this.rows = this.rows.filter((row) => row.id !== this.deleteTarget.id);
         this.closeDelete();
       } catch (err) {
-        this.showToast("Delete failed");
+        this.showToast(this.$t("saved_search.delete_failed", "Delete failed"));
       } finally {
         this.loading = false;
       }

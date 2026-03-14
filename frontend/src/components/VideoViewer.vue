@@ -8,18 +8,18 @@
   >
     <div class="viewer-panel" ref="panel">
       <div class="viewer-bar">
-        <button class="viewer-btn" @click="close" aria-label="Close">✕</button>
+        <button class="viewer-btn" @click="close" :aria-label="$t('ui.close', 'Close')">✕</button>
         <div class="viewer-title" :title="current?.path || ''">
           {{ fileName(current?.path || "") }}
         </div>
         <div class="viewer-count">{{ index + 1 }} / {{ results.length }}</div>
-        <button class="viewer-btn" @click="togglePlay" aria-label="Play or pause">
-          {{ isPlaying ? "Pause" : "Play" }}
+        <button class="viewer-btn" @click="togglePlay" :aria-label="$t('viewer.play_pause', 'Play or pause')">
+          {{ isPlaying ? $t("viewer.pause", "Pause") : $t("viewer.play", "Play") }}
         </button>
-        <button class="viewer-btn" @click="stopPlayback" aria-label="Stop">Stop</button>
-        <button class="viewer-btn" @click="openObject" aria-label="Open object">Object</button>
+        <button class="viewer-btn" @click="stopPlayback" :aria-label="$t('viewer.stop', 'Stop')">{{ $t("viewer.stop", "Stop") }}</button>
+        <button class="viewer-btn" @click="openObject" :aria-label="$t('object.open', 'Open object')">{{ $t("common.object", "Object") }}</button>
         <label class="viewer-slideshow-control">
-          <span>Sec</span>
+          <span>{{ $t("search.asset_seconds", "Sec") }}</span>
           <input
             :value="slideshowSeconds"
             type="number"
@@ -31,45 +31,45 @@
         <button
           class="viewer-btn"
           @click="toggleSlideshow"
-          :aria-label="slideshowActive ? 'End slideshow' : 'Start slideshow'"
+          :aria-label="slideshowActive ? $t('viewer.end_slideshow', 'End slideshow') : $t('viewer.start_slideshow', 'Start slideshow')"
         >
-          {{ slideshowActive ? "End slideshow" : "Start slideshow" }}
+          {{ slideshowActive ? $t("viewer.end_slideshow", "End slideshow") : $t("viewer.start_slideshow", "Start slideshow") }}
         </button>
-        <button v-if="canProposeRotate" class="viewer-btn" @click="rotateLeft" aria-label="Rotate counterclockwise">↺</button>
-        <button v-if="canProposeRotate" class="viewer-btn" @click="rotateRight" aria-label="Rotate clockwise">↻</button>
+        <button v-if="canProposeRotate" class="viewer-btn" @click="rotateLeft" :aria-label="$t('viewer.rotate_ccw', 'Rotate counterclockwise')">↺</button>
+        <button v-if="canProposeRotate" class="viewer-btn" @click="rotateRight" :aria-label="$t('viewer.rotate_cw', 'Rotate clockwise')">↻</button>
         <button
           v-if="canProposeRotate && pendingQuarterTurns !== 0"
           class="viewer-btn"
           :disabled="rotateSaving"
           @click="createRotateProposal"
-          aria-label="Create rotate proposal"
+          :aria-label="$t('viewer.create_proposal', 'Create proposal')"
         >
-          Create proposal
+          {{ $t("viewer.create_proposal", "Create proposal") }}
         </button>
         <button
           v-if="canProposeRotate && pendingQuarterTurns !== 0"
           class="viewer-btn"
           :disabled="rotateSaving"
           @click="cancelPendingRotation"
-          aria-label="Cancel preview rotation"
+          :aria-label="$t('viewer.cancel_rotation', 'Cancel preview rotation')"
         >
-          Cancel
+          {{ $t("ui.cancel", "Cancel") }}
         </button>
         <button
           v-if="canEditTags"
           class="viewer-btn"
           @click="openEditor"
-          aria-label="Edit tags"
+          :aria-label="$t('viewer.edit_tags', 'Edit Tags')"
         >
-          Edit Tags
+          {{ $t("viewer.edit_tags", "Edit Tags") }}
         </button>
         <button
           v-if="canTrash"
           class="viewer-btn danger"
           @click="moveToTrash"
-          aria-label="Move to Trash"
+          :aria-label="$t('viewer.move_to_trash', 'Move to Trash')"
         >
-          Move to Trash
+          {{ $t("viewer.move_to_trash", "Move to Trash") }}
         </button>
       </div>
 
@@ -78,7 +78,7 @@
           class="nav-btn"
           :disabled="index <= 0"
           @click="prev"
-          aria-label="Previous"
+          :aria-label="$t('ui.previous', 'Previous')"
         >
           ‹
         </button>
@@ -96,13 +96,13 @@
             @ended="onVideoEnded"
             @error="onMediaError"
           />
-          <div v-else class="viewer-placeholder">Video not available</div>
+          <div v-else class="viewer-placeholder">{{ $t("viewer.video_not_available", "Video not available") }}</div>
         </div>
         <button
           class="nav-btn"
           :disabled="index >= results.length - 1"
           @click="next"
-          aria-label="Next"
+          :aria-label="$t('ui.next', 'Next')"
         >
           ›
         </button>
@@ -111,25 +111,25 @@
         {{ currentTags.join(", ") }}
       </div>
       <div v-if="mediaError" class="viewer-badge">{{ mediaError }}</div>
-      <div v-if="rotateSaving" class="viewer-badge">Creating proposal...</div>
+      <div v-if="rotateSaving" class="viewer-badge">{{ $t("viewer.create_proposal_busy", "Creating proposal...") }}</div>
       <div v-if="toast" class="viewer-inline-toast">{{ toast }}</div>
     </div>
 
     <div v-if="editOpen" class="modal-backdrop" @click.self="closeEditor">
       <div class="modal tag-editor-modal">
-        <h3>Edit Tags</h3>
+        <h3>{{ $t("viewer.edit_tags", "Edit Tags") }}</h3>
         <div class="tag-editor-chips">
           <span v-for="tag in editTags" :key="tag" class="tag-chip">
             {{ tag }}
-            <button type="button" @click="removeEditTag(tag)" aria-label="Remove tag">✕</button>
+            <button type="button" @click="removeEditTag(tag)" :aria-label="$t('viewer.remove_tag', 'Remove tag')">✕</button>
           </span>
         </div>
         <label>
-          Add tag
+          {{ $t("viewer.add_tag_label", "Add tag") }}
           <input
             v-model="editInput"
             type="text"
-            placeholder="Type a tag and press Enter"
+            :placeholder="$t('viewer.add_tag_placeholder', 'Type a tag and press Enter')"
             @input="onEditInput"
             @keydown.enter.prevent="addEditTagFromInput"
           />
@@ -147,9 +147,9 @@
           </button>
         </div>
         <div class="modal-actions">
-          <button class="inline" @click="saveEditTags" :disabled="editLoading">Save</button>
-          <button class="inline" @click="restoreOriginalTags" :disabled="editLoading">Restore original</button>
-          <button class="inline" @click="closeEditor" :disabled="editLoading">Cancel</button>
+          <button class="inline" @click="saveEditTags" :disabled="editLoading">{{ $t("ui.save", "Save") }}</button>
+          <button class="inline" @click="restoreOriginalTags" :disabled="editLoading">{{ $t("viewer.restore_original", "Restore original") }}</button>
+          <button class="inline" @click="closeEditor" :disabled="editLoading">{{ $t("ui.cancel", "Cancel") }}</button>
         </div>
         <p v-if="editError" class="error">{{ editError }}</p>
       </div>
@@ -158,6 +158,8 @@
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "VideoViewer",
   props: {
@@ -441,12 +443,12 @@ export default {
         const resolveRes = await fetch(`/api/objects/resolve?file_id=${this.current.id}`);
         const resolved = await resolveRes.json().catch(() => ({}));
         if (!resolveRes.ok) {
-          this.toast = resolved.error || "Failed to resolve object";
+          this.toast = resolved.error || this.$t("viewer.resolve_failed", "Failed to resolve object");
           return;
         }
         const sha256 = String(resolved.sha256 || "");
         if (!sha256) {
-          this.toast = "Object SHA-256 not available";
+          this.toast = this.$t("viewer.sha_unavailable", "Object SHA-256 not available");
           return;
         }
         const proposalType = this.pendingQuarterTurns < 0 ? "rotate_left" : "rotate_right";
@@ -461,16 +463,16 @@ export default {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          this.toast = data.error || "Failed to create proposal";
+          this.toast = apiErrorMessage(data.error, "viewer.proposal_create_failed", "Failed to create proposal");
           return;
         }
         this.pendingQuarterTurns = 0;
-        this.toast = "Rotate proposal created";
+        this.toast = this.$t("viewer.proposal_rotate_created", "Rotate proposal created");
         setTimeout(() => {
           this.toast = "";
         }, 2000);
       } catch (_e) {
-        this.toast = "Failed to create proposal";
+        this.toast = this.$t("viewer.proposal_create_failed", "Failed to create proposal");
       } finally {
         this.rotateSaving = false;
       }
@@ -506,7 +508,7 @@ export default {
         return;
       }
       const relPath = this.current.path || this.fileName(this.current.path);
-      const ok = window.confirm(`Move to Trash?\n${relPath}\nThis is reversible from Admin -> Trash.`);
+      const ok = window.confirm(`${this.$t("viewer.move_to_trash", "Move to Trash")}?\n${relPath}\n${this.$t("viewer.trash_reversible", "This is reversible from Admin -> Trash.")}`);
       if (!ok) {
         return;
       }
@@ -518,13 +520,13 @@ export default {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          this.toast = data.error || "Failed to move to trash";
+          this.toast = apiErrorMessage(data.error, "viewer.trash_failed", "Failed to move to trash");
           return;
         }
         this.$emit("trashed", { id: this.current.id });
         this.close();
       } catch (_e) {
-        this.toast = "Failed to move to trash";
+        this.toast = this.$t("viewer.trash_failed", "Failed to move to trash");
       }
     },
     async fetchCurrentTags() {
@@ -570,13 +572,13 @@ export default {
     },
     validateTag(tag) {
       if (!tag) {
-        return "Tag cannot be empty";
+        return this.$t("viewer.tag_empty", "Tag cannot be empty");
       }
       if (tag.length > 128) {
-        return "Tag too long (max 128)";
+        return this.$t("viewer.tag_too_long", "Tag too long (max 128)");
       }
       if (tag.includes("|")) {
-        return "Tag must not contain pipe character";
+        return this.$t("viewer.tag_pipe_forbidden", "Tag must not contain pipe character");
       }
       return "";
     },
@@ -658,19 +660,19 @@ export default {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          this.editError = data.error || "Failed to save tags";
+          this.editError = apiErrorMessage(data.error, "viewer.tags_save_failed", "Failed to save tags");
           this.editLoading = false;
           return;
         }
         const tags = Array.isArray(data.tags) ? data.tags : normalized;
         this.tagsById = { ...this.tagsById, [this.current.id]: tags };
         this.closeEditor();
-        this.toast = "Tag edit queued.";
+        this.toast = this.$t("viewer.tag_edit_queued", "Tag edit queued.");
         setTimeout(() => {
           this.toast = "";
         }, 2500);
       } catch (_e) {
-        this.editError = "Failed to save tags";
+        this.editError = this.$t("viewer.tags_save_failed", "Failed to save tags");
       } finally {
         this.editLoading = false;
       }
@@ -687,17 +689,17 @@ export default {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          this.editError = data.error || "Failed to restore original tags";
+          this.editError = apiErrorMessage(data.error, "viewer.restore_failed", "Failed to restore original tags");
           this.editLoading = false;
           return;
         }
         this.closeEditor();
-        this.toast = "Original tag restore queued.";
+        this.toast = this.$t("viewer.restore_queued", "Original tag restore queued.");
         setTimeout(() => {
           this.toast = "";
         }, 2500);
       } catch (_e) {
-        this.editError = "Failed to restore original tags";
+        this.editError = this.$t("viewer.restore_failed", "Failed to restore original tags");
       } finally {
         this.editLoading = false;
       }

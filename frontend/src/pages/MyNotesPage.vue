@@ -1,13 +1,13 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1>My Notes</h1>
-      <p>Your object notes across the gallery.</p>
+      <h1>{{ $t("notes.title", "My Notes") }}</h1>
+      <p>{{ $t("notes.description", "Your object notes across the gallery.") }}</p>
     </header>
 
     <section class="panel">
       <div class="row">
-        <button type="button" class="inline" @click="load" :disabled="loading">Refresh</button>
+        <button type="button" class="inline" @click="load" :disabled="loading">{{ $t("ui.refresh", "Refresh") }}</button>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
     </section>
@@ -16,12 +16,12 @@
       <table class="results-table" v-if="items.length">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>SHA</th>
-            <th>Object Status</th>
-            <th>Note</th>
-            <th>Created</th>
-            <th>Action</th>
+            <th>{{ $t("common.id", "ID") }}</th>
+            <th>{{ $t("object.sha", "SHA") }}</th>
+            <th>{{ $t("object.status", "Status") }}</th>
+            <th>{{ $t("notes.single", "Note") }}</th>
+            <th>{{ $t("object.created", "Created") }}</th>
+            <th>{{ $t("object.action", "Action") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -33,18 +33,20 @@
             <td>{{ row.created_at }}</td>
             <td>
               <router-link class="inline-link" :to="{ path: '/object', query: { sha256: row.sha256 } }">
-                Open object
+                {{ $t("object.open", "Open object") }}
               </router-link>
             </td>
           </tr>
         </tbody>
       </table>
-      <p v-else class="muted">No notes yet.</p>
+      <p v-else class="muted">{{ $t("notes.empty", "No notes yet.") }}</p>
     </section>
   </div>
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "MyNotesPage",
   data() {
@@ -70,12 +72,12 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to load notes";
+          this.error = apiErrorMessage(data.error, "notes.load_failed", "Failed to load notes");
           return;
         }
         this.items = Array.isArray(data.items) ? data.items : [];
       } catch (_e) {
-        this.error = "Failed to load notes";
+        this.error = this.$t("notes.load_failed", "Failed to load notes");
       } finally {
         this.loading = false;
       }

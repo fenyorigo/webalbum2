@@ -1,32 +1,32 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1>Tag Admin</h1>
-      <p>Control tag visibility for global and personal scope.</p>
+      <h1>{{ $t("tag_admin.title", "Tag Admin") }}</h1>
+      <p>{{ $t("tag_admin.description", "Control tag visibility for global and personal scope.") }}</p>
     </header>
 
     <section class="panel">
       <div class="row">
         <label>
-          Search
-          <input v-model.trim="query" placeholder="Filter tags..." />
+          {{ $t("misc.search", "Search") }}
+          <input v-model.trim="query" :placeholder="$t('tags.filter_placeholder', 'Filter tags...')" />
         </label>
         <label>
-          Limit
+          {{ $t("misc.limit", "Limit") }}
           <input v-model.number="limit" type="number" min="10" max="200" />
         </label>
         <label v-if="isAdmin" class="checkbox">
           <input type="checkbox" v-model="revealHidden" />
-          Reveal hidden tags
+          {{ $t("tags.reveal_hidden", "Reveal hidden tags") }}
         </label>
-        <button class="inline" :disabled="loading" @click="fetchTags">Refresh</button>
+        <button class="inline" :disabled="loading" @click="fetchTags">{{ $t("ui.refresh", "Refresh") }}</button>
         <button
           v-if="isAdmin"
           class="inline"
           :disabled="loading"
           @click="reenableAllTags"
         >
-          Re-enable all tags
+          {{ $t("tags.reenable", "Re-enable tags") }}
         </button>
         <button
           v-if="isAdmin"
@@ -34,49 +34,49 @@
           :disabled="loading"
           @click="exportTagsCsv"
         >
-          Export tags
+          {{ $t("tags.export", "Export tags") }}
         </button>
-        <button class="inline" :disabled="loading || !hasChanges" @click="saveAll">Save</button>
-        <button class="inline" :disabled="loading" @click="cancelChanges">Cancel</button>
+        <button class="inline" :disabled="loading || !hasChanges" @click="saveAll">{{ $t("ui.save", "Save") }}</button>
+        <button class="inline" :disabled="loading" @click="cancelChanges">{{ $t("ui.cancel", "Cancel") }}</button>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
     </section>
 
     <section class="results">
       <div class="meta">
-        <span v-if="loading">Loading…</span>
-        <span v-else-if="total === null">Results: —</span>
-        <span v-else>Results: {{ rows.length }} of {{ total }}</span>
+        <span v-if="loading">{{ $t("common.loading", "Loading...") }}</span>
+        <span v-else-if="total === null">{{ $t("search.results_empty", "Results: —") }}</span>
+        <span v-else>{{ $t("results.title", "Results") }}: {{ rows.length }} of {{ total }}</span>
       </div>
       <div class="pager" v-if="total !== null">
-        <button :disabled="page === 1 || loading" @click="prevPage">Previous</button>
-        <span>Page {{ page }} of {{ totalPages }}</span>
+        <button :disabled="page === 1 || loading" @click="prevPage">{{ $t("ui.previous", "Previous") }}</button>
+        <span>{{ $t("audit.page_of", { x: page, y: totalPages }, "Page {x} of {y}") }}</span>
         <input
           v-model.number="pageInput"
           type="number"
           min="1"
           :max="totalPages"
-          placeholder="Go to"
+          :placeholder="$t('ui.go', 'Go')"
         />
-        <button :disabled="loading" @click="jumpToPage">Go</button>
-        <button :disabled="page >= totalPages || loading" @click="nextPage">Next</button>
+        <button :disabled="loading" @click="jumpToPage">{{ $t("ui.go", "Go") }}</button>
+        <button :disabled="page >= totalPages || loading" @click="nextPage">{{ $t("ui.next", "Next") }}</button>
       </div>
       <table class="tags-table" v-if="rows.length">
         <thead>
           <tr>
             <th>
               <button type="button" class="sort-link" @click="toggleSort('tag')">
-                Tag {{ sortIndicator('tag') }}
+                {{ $t("tags.single", "Tag") }} {{ sortIndicator('tag') }}
               </button>
             </th>
-            <th>Variants</th>
+            <th>{{ $t("tags.variants", "Variants") }}</th>
             <th>
               <button type="button" class="sort-link" @click="toggleSort('images')">
-                Images {{ sortIndicator('images') }}
+                {{ $t("results.images", "images") }} {{ sortIndicator('images') }}
               </button>
             </th>
-            <th v-if="isAdmin">Enabled (Global)</th>
-            <th>Enabled<span v-if="isAdmin"> (Personal)</span></th>
+            <th v-if="isAdmin">{{ $t("tags.enabled_global", "Enabled (Global)") }}</th>
+            <th>{{ isAdmin ? $t("tags.enabled_personal", "Enabled (Personal)") : $t("tags.enabled", "Enabled") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -102,6 +102,8 @@
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "TagsPage",
   data() {
@@ -161,7 +163,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to load tags";
+          this.error = apiErrorMessage(data.error, "tags.load_failed", "Failed to load tags");
           this.rows = [];
           this.total = null;
           return;
@@ -291,7 +293,7 @@ export default {
           }
           if (!res.ok) {
             const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || "Failed to save tag settings");
+            throw new Error(apiErrorMessage(data.error, "tags.save_failed", "Failed to save tag settings"));
           }
         }
         this.$router.push("/");
@@ -305,7 +307,7 @@ export default {
       if (!this.isAdmin) {
         return;
       }
-      if (!window.confirm("Re-enable all tags globally and for all users?")) {
+      if (!window.confirm(this.$t("tags.reenable_confirm", "Re-enable all tags globally and for all users?"))) {
         return;
       }
       this.loading = true;
@@ -317,14 +319,14 @@ export default {
         }
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          this.error = data.error || "Failed to re-enable tags";
+          this.error = apiErrorMessage(data.error, "tags.reenable_failed", "Failed to re-enable tags");
           return;
         }
-        window.alert("All tags are re-enabled.");
+        window.alert(this.$t("tags.reenable_done", "All tags are re-enabled."));
         this.page = 1;
         await this.fetchTags();
       } catch (err) {
-        this.error = err && err.message ? err.message : "Failed to re-enable tags";
+        this.error = err && err.message ? err.message : this.$t("tags.reenable_failed", "Failed to re-enable tags");
       } finally {
         this.loading = false;
       }
@@ -363,7 +365,7 @@ export default {
         }
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          this.error = data.error || "Failed to export tags";
+          this.error = apiErrorMessage(data.error, "tags.export_failed", "Failed to export tags");
           return;
         }
 
@@ -401,7 +403,7 @@ export default {
         a.remove();
         URL.revokeObjectURL(url);
       } catch (_err) {
-        this.error = "Failed to export tags";
+        this.error = this.$t("tags.export_failed", "Failed to export tags");
       } finally {
         this.loading = false;
       }

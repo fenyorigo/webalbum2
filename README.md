@@ -4,7 +4,7 @@ Backend and frontend for browsing an indexer-produced SQLite database (read-only
 
 ## Release
 
-- Current version: `2.1.0`
+- Current version: `2.2.0`
 - See `CHANGELOG.md` for release notes.
 
 ## Backend
@@ -339,6 +339,7 @@ This restores SELinux contexts for newly copied files and prevents runtime `500`
     - `WA_INDEXER2_CONFIG` may be omitted if the config file is at `WA_INDEXER2_ROOT/config.yaml`.
     - `sudo cp backend/deploy/systemd/webalbum-assets-worker.service /etc/systemd/system/`
     - `sudo cp backend/deploy/systemd/webalbum-assets-worker.timer /etc/systemd/system/`
+    - Important when deploying v2 alongside v1: verify `/etc/systemd/system/webalbum-assets-worker.service` points to `/var/www/webalbum2/backend/bin/assets_worker.php` and uses `WorkingDirectory=/var/www/webalbum2`.
     - `sudo systemctl daemon-reload`
     - `sudo systemctl enable --now webalbum-assets-worker.timer`
     - Optional immediate run: `sudo systemctl start webalbum-assets-worker.service --no-block`

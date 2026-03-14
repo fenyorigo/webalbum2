@@ -1,17 +1,17 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1>Assets</h1>
-      <p>Documents and audio indexed in the archive.</p>
+      <h1>{{ $t("admin.assets", "Assets") }}</h1>
+      <p>{{ $t("assets.description", "Documents and audio indexed in the archive.") }}</p>
     </header>
 
     <section class="panel">
       <div class="row">
-        <button type="button" @click="scanNow" :disabled="loading">Scan documents and audio</button>
-        <button type="button" class="inline" @click="refreshJobs" :disabled="loading">Refresh job status</button>
+        <button type="button" @click="scanNow" :disabled="loading">{{ $t("admin.scan_documents_audio", "Scan documents and audio") }}</button>
+        <button type="button" class="inline" @click="refreshJobs" :disabled="loading">{{ $t("ui.refresh", "Refresh") }} {{ $t("admin.job_status", "Job status") }}</button>
       </div>
       <p v-if="jobs" class="muted">
-        Jobs: queued {{ jobs.counts.queued || 0 }}, running {{ jobs.counts.running || 0 }}, done {{ jobs.counts.done || 0 }}, error {{ jobs.counts.error || 0 }}
+        {{ $t("assets.jobs_summary", { queued: jobs.counts.queued || 0, running: jobs.counts.running || 0, done: jobs.counts.done || 0, error: jobs.counts.error || 0 }, "Jobs: queued {queued}, running {running}, done {done}, error {error}") }}
       </p>
       <p v-if="jobs && jobs.split" class="muted">
         Split: queued thumb {{ jobs.split.queued.doc_thumb || 0 }}, queued preview {{ jobs.split.queued.doc_pdf_preview || 0 }}
@@ -21,32 +21,32 @@
       </p>
       <div class="row">
         <label>
-          Search path
+          {{ $t("assets.search_path", "Search path") }}
           <input v-model.trim="filters.q" type="text" placeholder="2020/Budapest" />
         </label>
         <label>
           Type
           <select v-model="filters.type">
-            <option value="">Any</option>
-            <option value="doc">Documents</option>
-            <option value="audio">Audio</option>
+            <option value="">{{ $t("common.any", "Any") }}</option>
+            <option value="doc">{{ $t("search.type.documents", "Documents") }}</option>
+            <option value="audio">{{ $t("search.type.audio", "Audio") }}</option>
           </select>
         </label>
         <label>
-          Ext
+          {{ $t("assets.ext", "Ext") }}
           <input v-model.trim="filters.ext" type="text" placeholder="pdf" />
         </label>
         <label>
-          Derivative status
+          {{ $t("assets.derivative_status", "Derivative status") }}
           <select v-model="filters.status">
-            <option value="">Any</option>
-            <option value="pending">Pending</option>
-            <option value="ready">Ready</option>
-            <option value="error">Error</option>
+            <option value="">{{ $t("common.any", "Any") }}</option>
+            <option value="pending">{{ $t("status.pending", "Pending") }}</option>
+            <option value="ready">{{ $t("status.ready", "Ready") }}</option>
+            <option value="error">{{ $t("common.error", "Error") }}</option>
           </select>
         </label>
         <label>
-          Page size
+          {{ $t("misc.limit", "Limit") }}
           <select v-model.number="pageSize">
             <option :value="25">25</option>
             <option :value="50">50</option>
@@ -55,55 +55,55 @@
         </label>
       </div>
       <div class="row actions">
-        <button type="button" @click="applyFilters" :disabled="loading">Apply</button>
-        <button type="button" class="inline" @click="clearFilters" :disabled="loading">Clear</button>
+        <button type="button" @click="applyFilters" :disabled="loading">{{ $t("ui.apply", "Apply") }}</button>
+        <button type="button" class="inline" @click="clearFilters" :disabled="loading">{{ $t("ui.clear", "Clear") }}</button>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
     </section>
 
     <section class="results">
       <div class="meta">
-        <span v-if="loading">Loading…</span>
-        <span v-else>Total: {{ total }} · Page {{ page }} of {{ totalPages }}</span>
+        <span v-if="loading">{{ $t("common.loading", "Loading...") }}</span>
+        <span v-else>Total: {{ total }} · {{ $t("audit.page_of", { x: page, y: totalPages }, "Page {x} of {y}") }}</span>
       </div>
       <div class="status-counters">
-        <span>Pending: {{ counters.pending }}</span>
-        <span>Running: {{ counters.running }}</span>
-        <span>Ready: {{ counters.ready }}</span>
-        <span>No processing needed: {{ counters.no_processing }}</span>
-        <span>Failed: {{ counters.failed }}</span>
+        <span>{{ $t("status.pending", "Pending") }}: {{ counters.pending }}</span>
+        <span>{{ $t("status.running", "Running") }}: {{ counters.running }}</span>
+        <span>{{ $t("status.ready", "Ready") }}: {{ counters.ready }}</span>
+        <span>{{ $t("status.no_processing", "No processing needed") }}: {{ counters.no_processing }}</span>
+        <span>{{ $t("status.failed", "Failed") }}: {{ counters.failed }}</span>
       </div>
       <div class="status-tabs">
-        <button type="button" class="inline" :class="{ active: statusTab === 'pending' }" @click="statusTab = 'pending'">Pending</button>
-        <button type="button" class="inline" :class="{ active: statusTab === 'running' }" @click="statusTab = 'running'">Running</button>
-        <button type="button" class="inline" :class="{ active: statusTab === 'ready' }" @click="statusTab = 'ready'">Ready</button>
-        <button type="button" class="inline" :class="{ active: statusTab === 'no_processing' }" @click="statusTab = 'no_processing'">No processing needed</button>
-        <button type="button" class="inline" :class="{ active: statusTab === 'failed' }" @click="statusTab = 'failed'">Failed</button>
+        <button type="button" class="inline" :class="{ active: statusTab === 'pending' }" @click="statusTab = 'pending'">{{ $t("status.pending", "Pending") }}</button>
+        <button type="button" class="inline" :class="{ active: statusTab === 'running' }" @click="statusTab = 'running'">{{ $t("status.running", "Running") }}</button>
+        <button type="button" class="inline" :class="{ active: statusTab === 'ready' }" @click="statusTab = 'ready'">{{ $t("status.ready", "Ready") }}</button>
+        <button type="button" class="inline" :class="{ active: statusTab === 'no_processing' }" @click="statusTab = 'no_processing'">{{ $t("status.no_processing", "No processing needed") }}</button>
+        <button type="button" class="inline" :class="{ active: statusTab === 'failed' }" @click="statusTab = 'failed'">{{ $t("status.failed", "Failed") }}</button>
         <button
           type="button"
           class="inline"
           @click="clearList"
           :disabled="clearableCount === 0"
-          title="Only completed items can be cleared."
+          :title="$t('assets.clear_done_only', 'Only completed items can be cleared.')"
         >
-          Clear list
+          {{ $t("admin.scan_clear_list", "Clear list") }}
         </button>
       </div>
 
       <div class="pager" v-if="totalPages > 1">
-        <button :disabled="loading || page <= 1" @click="prevPage">Previous</button>
-        <button :disabled="loading || page >= totalPages" @click="nextPage">Next</button>
+        <button :disabled="loading || page <= 1" @click="prevPage">{{ $t("ui.previous", "Previous") }}</button>
+        <button :disabled="loading || page >= totalPages" @click="nextPage">{{ $t("ui.next", "Next") }}</button>
       </div>
 
       <table class="results-table" v-if="rowsForTab.length">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Path</th>
-            <th>Type</th>
-            <th>Ext</th>
-            <th>Size</th>
-            <th>MTime</th>
+            <th>{{ $t("common.id", "ID") }}</th>
+            <th>{{ $t("common.path", "Path") }}</th>
+            <th>{{ $t("common.type", "Type") }}</th>
+            <th>{{ $t("assets.ext", "Ext") }}</th>
+            <th>{{ $t("common.size", "Size") }}</th>
+            <th>{{ $t("assets.mtime", "MTime") }}</th>
             <th>
               <button class="sort-btn" type="button" @click="toggleSort('thumb_status')">
                 Thumb {{ sortLabel('thumb_status') }}
@@ -114,8 +114,8 @@
                 Preview {{ sortLabel('preview_status') }}
               </button>
             </th>
-            <th>Status</th>
-            <th>Actions</th>
+            <th>{{ $t("object.status", "Status") }}</th>
+            <th>{{ $t("object.action", "Action") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -130,7 +130,7 @@
             <td>{{ displayStatus(row, "preview") }}</td>
             <td>{{ displayOverallStatus(row) }}</td>
             <td class="actions-col">
-              <button class="inline" type="button" @click="requeue(row, 'thumb')" :disabled="loading">Requeue thumb</button>
+              <button class="inline" type="button" @click="requeue(row, 'thumb')" :disabled="loading">{{ $t("assets.requeue_thumb", "Requeue thumb") }}</button>
               <button
                 v-if="canRequeuePreview(row)"
                 class="inline"
@@ -144,11 +144,11 @@
           </tr>
         </tbody>
       </table>
-      <p v-else-if="!loading" class="muted">No items in this section.</p>
+      <p v-else-if="!loading" class="muted">{{ $t("admin.no_items_section", "No items in this section.") }}</p>
 
       <div class="pager" v-if="totalPages > 1">
-        <button :disabled="loading || page <= 1" @click="prevPage">Previous</button>
-        <button :disabled="loading || page >= totalPages" @click="nextPage">Next</button>
+        <button :disabled="loading || page <= 1" @click="prevPage">{{ $t("ui.previous", "Previous") }}</button>
+        <button :disabled="loading || page >= totalPages" @click="nextPage">{{ $t("ui.next", "Next") }}</button>
       </div>
     </section>
 
@@ -157,6 +157,8 @@
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "AssetsPage",
   data() {
@@ -249,7 +251,7 @@ export default {
       }
       const data = await res.json();
       if (!res.ok) {
-        this.error = data.error || "Failed to load assets";
+        this.error = apiErrorMessage(data.error, "assets.load_failed", "Failed to load assets");
         this.items = [];
         this.total = 0;
         this.totalPages = 1;
@@ -323,16 +325,16 @@ export default {
         return "N/A";
       }
       if (value === "error") {
-        return "Failed";
+        return this.$t("status.failed", "Failed");
       }
       if (value === "pending") {
-        return "Pending";
+        return this.$t("status.pending", "Pending");
       }
       if (value === "running") {
-        return "Running";
+        return this.$t("status.running", "Running");
       }
       if (value === "ready") {
-        return "Ready";
+        return this.$t("status.ready", "Ready");
       }
       return String(value);
     },
@@ -357,11 +359,11 @@ export default {
     },
     displayOverallStatus(row) {
       const status = this.overallStatus(row);
-      if (status === "pending") return "Pending";
-      if (status === "running") return "Running";
-      if (status === "ready") return "Ready";
-      if (status === "no_processing") return "No processing needed";
-      if (status === "failed") return "Failed";
+      if (status === "pending") return this.$t("status.pending", "Pending");
+      if (status === "running") return this.$t("status.running", "Running");
+      if (status === "ready") return this.$t("status.ready", "Ready");
+      if (status === "no_processing") return this.$t("status.no_processing", "No processing needed");
+      if (status === "failed") return this.$t("status.failed", "Failed");
       return "N/A";
     },
     clearList() {
@@ -378,7 +380,7 @@ export default {
       this.updateRefreshPolicy();
     },
     async scanNow() {
-      if (!window.confirm("Scan your photo library for documents and audio files, then queue any required processing (thumbnails/previews) for supported document types.\n\nNote: Audio items don’t generate thumbnails or previews.")) {
+      if (!window.confirm(this.$t("assets.scan_confirm", "Scan your photo library for documents and audio files, then queue any required processing (thumbnails/previews) for supported document types.\n\nNote: Audio items don’t generate thumbnails or previews."))) {
         return;
       }
       this.loading = true;
@@ -386,10 +388,10 @@ export default {
         const res = await fetch("/api/admin/assets/scan", { method: "POST" });
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Scan failed";
+          this.error = apiErrorMessage(data.error, "assets.scan_failed", "Scan failed");
           return;
         }
-        this.toast = `Scan done. Scanned ${data.scanned} (Documents: ${data.scanned_docs || 0}, Audio: ${data.scanned_audio || 0}), enqueued ${data.jobs_enqueued} doc jobs.`;
+        this.toast = this.$t("assets.scan_done", { scanned: data.scanned, docs: data.scanned_docs || 0, audio: data.scanned_audio || 0, jobs: data.jobs_enqueued }, "Scan done. Scanned {scanned} (Documents: {docs}, Audio: {audio}), enqueued {jobs} doc jobs.");
         setTimeout(() => (this.toast = ""), 2000);
         this.clearedIds = [];
         this.statusTab = "pending";
@@ -408,10 +410,10 @@ export default {
         });
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Requeue failed";
+          this.error = apiErrorMessage(data.error, "assets.requeue_failed", "Requeue failed");
           return;
         }
-        this.toast = `Queued: ${data.queued.join(", ")}`;
+        this.toast = this.$t("assets.requeue_done", { items: data.queued.join(", ") }, "Queued: {items}");
         setTimeout(() => (this.toast = ""), 1800);
         await this.fetchAssets();
         await this.refreshJobs();

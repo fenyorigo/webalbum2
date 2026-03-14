@@ -42,6 +42,18 @@ final class Compiler
         $op = $rule["op"];
         $value = $rule["value"];
 
+        if ($field === "id") {
+            if (is_array($value)) {
+                $placeholders = implode(",", array_fill(0, count($value), "?"));
+                foreach ($value as $id) {
+                    $params[] = $id;
+                }
+                return "(files.id IN (" . $placeholders . "))";
+            }
+            $params[] = $value;
+            return "(files.id = ?)";
+        }
+
         if ($field === "tag") {
             $params[] = $value;
             $exists = "EXISTS (SELECT 1 FROM file_tags ft JOIN tags t ON t.id = ft.tag_id WHERE ft.file_id = files.id AND t.tag = ?)";

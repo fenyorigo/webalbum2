@@ -9,6 +9,7 @@ final class Model
     private const GROUPS = ["ALL", "ANY"];
 
     private const FIELD_OPS = [
+        "id" => ["is"],
         "tag" => ["is", "is_not"],
         "taken" => ["before", "after", "between"],
         "type" => ["is", "is_not"],
@@ -187,7 +188,25 @@ final class Model
         }
 
         $value = $rule["value"];
-        if ($field === "tag") {
+        if ($field === "id") {
+            if (is_int($value)) {
+                if ($value < 1) {
+                    throw new \InvalidArgumentException("id must be a positive integer");
+                }
+            } elseif (is_array($value)) {
+                if ($value === []) {
+                    throw new \InvalidArgumentException("id list must not be empty");
+                }
+                foreach ($value as $id) {
+                    if (!is_int($id) || $id < 1) {
+                        throw new \InvalidArgumentException("id list must contain positive integers");
+                    }
+                }
+                $value = array_values(array_unique($value));
+            } else {
+                throw new \InvalidArgumentException("id must be a positive integer or integer array");
+            }
+        } elseif ($field === "tag") {
             if (!is_string($value) || $value === "") {
                 throw new \InvalidArgumentException("tag value must be a non-empty string");
             }

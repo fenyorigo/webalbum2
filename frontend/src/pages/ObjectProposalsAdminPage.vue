@@ -1,61 +1,61 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1>Object Proposals</h1>
-      <p>Admin review workflow for object-level change proposals.</p>
+      <h1>{{ $t("admin.object_proposals", "Object proposals") }}</h1>
+      <p>{{ $t("proposals.description", "Your submitted object change proposals.") }}</p>
     </header>
 
     <section class="panel">
       <div class="row">
         <label>
-          Status
+          {{ $t("object.status", "Status") }}
           <select v-model="status">
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="done">Done</option>
-            <option value="rejected">Rejected</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="all">All</option>
+            <option value="pending">{{ $t("status.pending", "Pending") }}</option>
+            <option value="approved">{{ $t("status.approved", "Approved") }}</option>
+            <option value="done">{{ $t("status.done", "Done") }}</option>
+            <option value="rejected">{{ $t("status.rejected", "Rejected") }}</option>
+            <option value="cancelled">{{ $t("status.cancelled", "Cancelled") }}</option>
+            <option value="all">{{ $t("status.all", "All") }}</option>
           </select>
         </label>
-        <button type="button" @click="refreshAll" :disabled="loading">Refresh</button>
+        <button type="button" @click="refreshAll" :disabled="loading">{{ $t("ui.refresh", "Refresh") }}</button>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
     </section>
 
     <section class="panel">
-      <h3>Transform Job Status</h3>
+      <h3>{{ $t("admin.job_status", "Job status") }}</h3>
       <p class="muted">
-        queued: {{ objectJobCounts.queued }} |
-        running: {{ objectJobCounts.running }} |
-        done: {{ objectJobCounts.done }} |
-        error: {{ objectJobCounts.error }}
+        {{ $t("status.queued", "Queued") }}: {{ objectJobCounts.queued }} |
+        {{ $t("status.running", "Running") }}: {{ objectJobCounts.running }} |
+        {{ $t("status.done", "Done") }}: {{ objectJobCounts.done }} |
+        {{ $t("common.error", "Error") }}: {{ objectJobCounts.error }}
       </p>
       <div class="row">
         <label>
-          Job filter
+          {{ $t("jobs.filter", "Job filter") }}
           <select v-model="jobStatus" @change="loadObjectJobs">
-            <option value="active">Active (queued/running)</option>
-            <option value="queued">Queued</option>
-            <option value="running">Running</option>
-            <option value="done">Done</option>
-            <option value="error">Error</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="all">All</option>
+            <option value="active">{{ $t("jobs.filter_active", "Active (queued/running)") }}</option>
+            <option value="queued">{{ $t("status.queued", "Queued") }}</option>
+            <option value="running">{{ $t("status.running", "Running") }}</option>
+            <option value="done">{{ $t("status.done", "Done") }}</option>
+            <option value="error">{{ $t("common.error", "Error") }}</option>
+            <option value="cancelled">{{ $t("status.cancelled", "Cancelled") }}</option>
+            <option value="all">{{ $t("status.all", "All") }}</option>
           </select>
         </label>
       </div>
       <table class="results-table" v-if="objectJobs.length">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>SHA-256</th>
-            <th>Status</th>
-            <th>Type</th>
-            <th>Attempts</th>
-            <th>Created</th>
-            <th>Completed</th>
-            <th>Error</th>
+            <th>{{ $t("common.id", "ID") }}</th>
+            <th>{{ $t("object.sha256", "SHA-256") }}</th>
+            <th>{{ $t("object.status", "Status") }}</th>
+            <th>{{ $t("common.type", "Type") }}</th>
+            <th>{{ $t("common.attempts", "Attempts") }}</th>
+            <th>{{ $t("object.created", "Created") }}</th>
+            <th>{{ $t("common.completed", "Completed") }}</th>
+            <th>{{ $t("common.error", "Error") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -71,20 +71,20 @@
           </tr>
         </tbody>
       </table>
-      <p v-else class="muted">No object transform jobs in this filter.</p>
+      <p v-else class="muted">{{ $t("jobs.empty", "No object transform jobs in this filter.") }}</p>
     </section>
 
     <section class="results">
       <table class="results-table" v-if="items.length">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>SHA-256</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th>Proposer</th>
-            <th>Created</th>
-            <th>Review</th>
+            <th>{{ $t("common.id", "ID") }}</th>
+            <th>{{ $t("object.sha256", "SHA-256") }}</th>
+            <th>{{ $t("common.type", "Type") }}</th>
+            <th>{{ $t("object.status", "Status") }}</th>
+            <th>{{ $t("common.proposer", "Proposer") }}</th>
+            <th>{{ $t("object.created", "Created") }}</th>
+            <th>{{ $t("admin.review", "Review") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -103,7 +103,7 @@
                 @click="startReview(row, 'approved')"
                 :disabled="loading"
               >
-                Approve
+                {{ $t("status.approve_action", "Approve") }}
               </button>
               <button
                 v-if="row.status === 'pending'"
@@ -112,31 +112,31 @@
                 @click="startReview(row, 'rejected')"
                 :disabled="loading"
               >
-                Reject
+                {{ $t("status.reject_action", "Reject") }}
               </button>
               <router-link class="inline-link" :to="{ path: '/object', query: { sha256: row.sha256 } }">
-                Open object
+                {{ $t("object.open", "Open object") }}
               </router-link>
             </td>
           </tr>
         </tbody>
       </table>
-      <p v-else class="muted">No proposals.</p>
+      <p v-else class="muted">{{ $t("proposals.empty", "No proposals in this filter.") }}</p>
     </section>
 
     <div v-if="reviewOpen" class="modal-backdrop" @click.self="closeReview">
       <div class="modal">
-        <h3>{{ reviewDecision === "approved" ? "Approve proposal" : "Reject proposal" }}</h3>
-        <p>Proposal #{{ reviewTarget && reviewTarget.id }} ({{ reviewTarget && reviewTarget.proposal_type }})</p>
+        <h3>{{ reviewDecision === "approved" ? $t("proposals.review_approve_title", "Approve proposal") : $t("proposals.review_reject_title", "Reject proposal") }}</h3>
+        <p>{{ $t("proposals.review_target", { id: reviewTarget && reviewTarget.id, type: reviewTarget && reviewTarget.proposal_type }, "Proposal #{id} ({type})") }}</p>
         <label>
-          Review note
-          <textarea v-model.trim="reviewNote" rows="4" placeholder="Optional rationale"></textarea>
+          {{ $t("proposals.review_note", "Review note") }}
+          <textarea v-model.trim="reviewNote" rows="4" :placeholder="$t('proposals.review_note_placeholder', 'Optional rationale')"></textarea>
         </label>
         <div class="modal-actions">
           <button type="button" @click="submitReview" :disabled="loading">
-            {{ reviewDecision === "approved" ? "Approve" : "Reject" }}
+            {{ reviewDecision === "approved" ? $t("status.approve_action", "Approve") : $t("status.reject_action", "Reject") }}
           </button>
-          <button type="button" class="inline" @click="closeReview" :disabled="loading">Cancel</button>
+          <button type="button" class="inline" @click="closeReview" :disabled="loading">{{ $t("ui.cancel", "Cancel") }}</button>
         </div>
       </div>
     </div>
@@ -144,6 +144,8 @@
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "ObjectProposalsAdminPage",
   data() {
@@ -193,12 +195,12 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to load proposals";
+          this.error = apiErrorMessage(data.error, "proposals.load_failed", "Failed to load proposals");
           return;
         }
         this.items = Array.isArray(data.items) ? data.items : [];
       } catch (_e) {
-        this.error = "Failed to load proposals";
+        this.error = this.$t("proposals.load_failed", "Failed to load proposals");
       } finally {
         if (manageLoading) {
           this.loading = false;
@@ -222,7 +224,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to load transform jobs";
+          this.error = apiErrorMessage(data.error, "jobs.load_failed", "Failed to load transform jobs");
           return;
         }
         this.objectJobs = Array.isArray(data.items) ? data.items : [];
@@ -230,7 +232,7 @@ export default {
           ? { queued: 0, running: 0, done: 0, error: 0, cancelled: 0, ...data.counts }
           : { queued: 0, running: 0, done: 0, error: 0, cancelled: 0 };
       } catch (_e) {
-        this.error = "Failed to load transform jobs";
+        this.error = this.$t("jobs.load_failed", "Failed to load transform jobs");
       } finally {
         if (manageLoading) {
           this.loading = false;
@@ -264,13 +266,13 @@ export default {
         });
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to review proposal";
+          this.error = apiErrorMessage(data.error, "proposals.review_failed", "Failed to review proposal");
           return;
         }
         this.closeReview();
         await this.refreshAll();
       } catch (_e) {
-        this.error = "Failed to review proposal";
+        this.error = this.$t("proposals.review_failed", "Failed to review proposal");
       } finally {
         this.loading = false;
       }

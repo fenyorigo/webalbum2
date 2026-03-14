@@ -1,13 +1,13 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1>Initial setup</h1>
-      <p>Create the first admin account.</p>
+      <h1>{{ $t("setup.title", "Initial setup") }}</h1>
+      <p>{{ $t("setup.description", "Create the first admin account.") }}</p>
     </header>
 
     <section class="panel login-panel">
       <label>
-        Admin username
+        {{ $t("setup.admin_username", "Admin username") }}
         <input v-model.trim="username" type="text" autocomplete="username" />
       </label>
       <label>
@@ -18,13 +18,15 @@
         Re-enter password
         <input v-model="confirm" type="password" autocomplete="new-password" />
       </label>
-      <button @click="submit" :disabled="loading">Create admin</button>
+      <button @click="submit" :disabled="loading">{{ $t("setup.create_admin", "Create admin") }}</button>
       <p v-if="error" class="error">{{ error }}</p>
     </section>
   </div>
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "SetupPage",
   data() {
@@ -40,7 +42,7 @@ export default {
     async submit() {
       this.error = "";
       if (!this.username) {
-        this.error = "Username is required";
+        this.error = this.$t("setup.username_required", "Username is required");
         return;
       }
       const error = this.validateStrongPassword(this.password);
@@ -49,7 +51,7 @@ export default {
         return;
       }
       if (this.password !== this.confirm) {
-        this.error = "Passwords do not match";
+        this.error = this.$t("setup.password_mismatch", "Passwords do not match");
         return;
       }
       this.loading = true;
@@ -61,12 +63,12 @@ export default {
         });
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Setup failed";
+          this.error = apiErrorMessage(data.error, "setup.failed", "Setup failed");
           return;
         }
         this.$router.push("/login");
       } catch (err) {
-        this.error = "Setup failed";
+        this.error = this.$t("setup.failed", "Setup failed");
       } finally {
         this.loading = false;
       }

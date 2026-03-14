@@ -6,9 +6,9 @@
         <th></th>
         <th></th>
         <th></th>
-        <th>Path</th>
-        <th>Type</th>
-        <th>Taken</th>
+        <th>{{ $t("common.path", "Path") }}</th>
+        <th>{{ $t("common.type", "Type") }}</th>
+        <th>{{ $t("search.sort.taken", "Taken") }}</th>
       </tr>
     </thead>
     <tbody>
@@ -42,7 +42,7 @@
             v-if="canFavorite && row.entity !== 'asset'"
             class="star"
             type="button"
-            :aria-label="row.is_favorite ? 'Unstar' : 'Star'"
+            :aria-label="row.is_favorite ? $t('results.unstar', 'Unstar') : $t('results.star', 'Star')"
             @click.stop="$emit('toggle-favorite', row.id)"
           >
             {{ row.is_favorite ? "★" : "☆" }}
@@ -54,8 +54,8 @@
           </button>
           <div class="item-id">ID: {{ dbId(row) }}</div>
           <div class="row-actions">
-            <button class="copy" type="button" @click="copyLink(row)">Copy</button>
-            <button class="copy" type="button" @click="$emit('open-object', row)">Object</button>
+            <button class="copy" type="button" @click="copyLink(row)">{{ $t("common.copy", "Copy") }}</button>
+            <button class="copy" type="button" @click="$emit('open-object', row)">{{ $t("common.object", "Object") }}</button>
           </div>
         </td>
         <td>{{ row.type }}</td>

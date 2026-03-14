@@ -12,6 +12,7 @@ import TrashPage from "./pages/TrashPage.vue";
 import AssetsPage from "./pages/AssetsPage.vue";
 import ObjectPage from "./pages/ObjectPage.vue";
 import ObjectProposalsAdminPage from "./pages/ObjectProposalsAdminPage.vue";
+import LocalizationAdminPage from "./pages/LocalizationAdminPage.vue";
 
 const routes = [
   { path: "/login", component: LoginPage },
@@ -26,7 +27,8 @@ const routes = [
   { path: "/trash", component: TrashPage },
   { path: "/assets", component: AssetsPage },
   { path: "/object", component: ObjectPage },
-  { path: "/admin/object-proposals", component: ObjectProposalsAdminPage }
+  { path: "/admin/object-proposals", component: ObjectProposalsAdminPage },
+  { path: "/admin/localization", component: LocalizationAdminPage }
 ];
 
 const router = createRouter({
@@ -78,7 +80,7 @@ router.beforeEach(async (to) => {
     }
     return "/login";
   }
-  if ((to.path === "/trash" || to.path === "/assets" || to.path === "/admin/object-proposals") && !user.is_admin) {
+  if ((to.path === "/trash" || to.path === "/assets" || to.path === "/admin/object-proposals" || to.path === "/admin/localization") && !user.is_admin) {
     return "/";
   }
   return true;

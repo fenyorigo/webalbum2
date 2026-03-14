@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WebAlbum\Http\Controllers;
 
 use WebAlbum\Db\Maria;
+use WebAlbum\I18nService;
 use WebAlbum\UserContext;
 
 final class PrefsController
@@ -45,16 +46,18 @@ final class PrefsController
                 "page_size" => $this->validatePageSize($data["page_size"] ?? $current["page_size"]),
                 "thumb_size" => $this->validateThumbSize($data["thumb_size"] ?? $current["thumb_size"]),
                 "sort_mode" => $this->validateSortMode($data["sort_mode"] ?? $current["sort_mode"]),
+                "ui_language" => $this->validateLanguage($data["ui_language"] ?? $current["ui_language"]),
             ];
             $db->exec(
-                "INSERT INTO wa_user_prefs (user_id, default_view, page_size, thumb_size, sort_mode) VALUES (?, ?, ?, ?, ?)\n" .
-                "ON DUPLICATE KEY UPDATE default_view = VALUES(default_view), page_size = VALUES(page_size), thumb_size = VALUES(thumb_size), sort_mode = VALUES(sort_mode)",
+                "INSERT INTO wa_user_prefs (user_id, default_view, page_size, thumb_size, sort_mode, ui_language) VALUES (?, ?, ?, ?, ?, ?)\n" .
+                "ON DUPLICATE KEY UPDATE default_view = VALUES(default_view), page_size = VALUES(page_size), thumb_size = VALUES(thumb_size), sort_mode = VALUES(sort_mode), ui_language = VALUES(ui_language)",
                 [
                     (int)$user["id"],
                     $next["default_view"],
                     $next["page_size"],
                     $next["thumb_size"],
                     $next["sort_mode"],
+                    $next["ui_language"],
                 ]
             );
             $this->json($next);
@@ -72,9 +75,10 @@ final class PrefsController
             "page_size" => 50,
             "thumb_size" => 180,
             "sort_mode" => "name_az",
+            "ui_language" => "en",
         ];
         $rows = $db->query(
-            "SELECT default_view, page_size, thumb_size, sort_mode FROM wa_user_prefs WHERE user_id = ?",
+            "SELECT default_view, page_size, thumb_size, sort_mode, ui_language FROM wa_user_prefs WHERE user_id = ?",
             [$userId]
         );
         if ($rows === []) {
@@ -86,6 +90,7 @@ final class PrefsController
             "page_size" => $this->validatePageSize($row["page_size"] ?? $defaults["page_size"]),
             "thumb_size" => $this->validateThumbSize($row["thumb_size"] ?? $defaults["thumb_size"]),
             "sort_mode" => $this->validateSortMode($row["sort_mode"] ?? $defaults["sort_mode"]),
+            "ui_language" => $this->validateLanguage($row["ui_language"] ?? $defaults["ui_language"]),
         ];
     }
 
@@ -122,6 +127,13 @@ final class PrefsController
     {
         $allowed = ["name_az", "name_za", "date_new_old", "date_old_new"];
         return in_array($value, $allowed, true) ? $value : "name_az";
+    }
+
+    private function validateLanguage($value): string
+    {
+        $service = new I18nService();
+        $lang = $service->normalizeLanguage(is_string($value) ? $value : '');
+        return $lang ?? 'en';
     }
 
     private function connect(): Maria

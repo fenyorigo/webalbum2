@@ -1,42 +1,42 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1 v-if="!setupRequired">Login</h1>
-      <h1 v-else>Create admin user</h1>
-      <p v-if="!setupRequired">Sign in to access Family memories.</p>
-      <p v-else>Set up the initial admin account.</p>
+      <h1 v-if="!setupRequired">{{ $t("login.title", "Login") }}</h1>
+      <h1 v-else>{{ $t("login.setup_title", "Create admin user") }}</h1>
+      <p v-if="!setupRequired">{{ $t("login.subtitle", "Sign in to access Family memories.") }}</p>
+      <p v-else>{{ $t("login.setup_subtitle", "Set up the initial admin account.") }}</p>
     </header>
 
     <section class="panel login-panel" v-if="!setupRequired">
       <label>
-        Username
+        {{ $t("login.username", "Username") }}
         <input v-model.trim="username" type="text" autocomplete="username" />
       </label>
       <label>
-        Password
+        {{ $t("login.password", "Password") }}
         <input v-model="password" type="password" autocomplete="current-password" />
       </label>
-      <button @click="submit" :disabled="loading">Login</button>
+      <button @click="submit" :disabled="loading">{{ $t("login.button", "Login") }}</button>
       <p v-if="error" class="error">{{ error }}</p>
     </section>
 
     <div v-else class="modal-backdrop">
       <div class="modal">
-        <h3>Create admin user</h3>
+        <h3>{{ $t("login.setup_title", "Create admin user") }}</h3>
         <label>
-          Admin username
+          {{ $t("login.setup_username", "Admin username") }}
           <input v-model.trim="setup.username" type="text" autocomplete="username" />
         </label>
         <label>
-          Password
+          {{ $t("login.password", "Password") }}
           <input v-model="setup.password" type="password" autocomplete="new-password" />
         </label>
         <label>
-          Confirm password
+          {{ $t("profile.confirm_password", "Confirm password") }}
           <input v-model="setup.confirm" type="password" autocomplete="new-password" />
         </label>
         <div class="modal-actions">
-          <button class="inline" @click="submitSetup" :disabled="loading">Create admin</button>
+          <button class="inline" @click="submitSetup" :disabled="loading">{{ $t("login.setup_button", "Create admin") }}</button>
         </div>
         <p v-if="setupError" class="error">{{ setupError }}</p>
       </div>
@@ -46,6 +46,9 @@
 </template>
 
 <script>
+import { applyI18nBundle } from "../i18n";
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "LoginPage",
   data() {
@@ -72,8 +75,21 @@ export default {
   },
   mounted() {
     this.checkSetup();
+    this.loadI18n();
   },
   methods: {
+    async loadI18n() {
+      try {
+        const res = await fetch("/api/i18n");
+        if (!res.ok) {
+          return;
+        }
+        const data = await res.json();
+        applyI18nBundle(data);
+      } catch (_err) {
+        // ignore
+      }
+    },
     async checkSetup() {
       try {
         const res = await fetch("/api/setup/status");
@@ -101,7 +117,7 @@ export default {
         });
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Login failed";
+          this.error = apiErrorMessage(data.error, "login.failed", "Login failed");
           return;
         }
         const user = data.user || null;
@@ -139,7 +155,7 @@ export default {
         });
         const data = await res.json();
         if (!res.ok) {
-          this.setupError = data.error || "Setup failed";
+          this.setupError = apiErrorMessage(data.error, "setup.failed", "Setup failed");
           return;
         }
         this.setupRequired = false;

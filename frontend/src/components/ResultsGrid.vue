@@ -23,7 +23,7 @@
           v-if="canFavorite && row.entity !== 'asset'"
           class="grid-star"
           type="button"
-          :aria-label="row.is_favorite ? 'Unstar' : 'Star'"
+          :aria-label="row.is_favorite ? $t('results.unstar', 'Unstar') : $t('results.star', 'Star')"
           @click.stop="$emit('toggle-favorite', row.id)"
         >
           {{ row.is_favorite ? "★" : "☆" }}
@@ -51,15 +51,15 @@
           v-if="canTrash && row.entity !== 'asset'"
           class="trash"
           type="button"
-          aria-label="Move to Trash"
+          :aria-label="$t('viewer.move_to_trash', 'Move to Trash')"
           @click.stop="$emit('request-trash', row)"
         >
           🗑
         </button>
         <span v-else></span>
         <div class="grid-actions-right">
-          <button class="copy" type="button" @click="$emit('open-object', row)">Object</button>
-          <button class="copy" type="button" @click="copyLink(row)">Copy</button>
+          <button class="copy" type="button" @click="$emit('open-object', row)">{{ $t("common.object", "Object") }}</button>
+          <button class="copy" type="button" @click="copyLink(row)">{{ $t("common.copy", "Copy") }}</button>
         </div>
       </div>
     </div>

@@ -43,6 +43,8 @@ use WebAlbum\Http\Controllers\AssetController;
 use WebAlbum\Http\Controllers\ObjectAdminController;
 use WebAlbum\Http\Controllers\ObjectCollabController;
 use WebAlbum\Http\Controllers\ObjectResolveController;
+use WebAlbum\Http\Controllers\I18nController;
+use WebAlbum\Http\Controllers\LocalizationAdminController;
 
 $method = $_SERVER["REQUEST_METHOD"] ?? "GET";
 $uri = $_SERVER["REQUEST_URI"] ?? "/";
@@ -78,6 +80,30 @@ if ($method === "GET" && !str_starts_with($path, "/api")) {
 }
 if ($method === "GET" && $path === "/api/health") {
     (new HealthController($root . "/config/config.php"))->handle();
+    exit;
+}
+if ($method === "GET" && $path === "/api/i18n") {
+    (new I18nController($root . "/config/config.php"))->bundle();
+    exit;
+}
+if ($method === "GET" && $path === "/api/admin/i18n/languages") {
+    (new LocalizationAdminController($root . "/config/config.php"))->listLanguages();
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/i18n/languages") {
+    (new LocalizationAdminController($root . "/config/config.php"))->createLanguage();
+    exit;
+}
+if ($method === "GET" && $path === "/api/admin/i18n/strings") {
+    (new LocalizationAdminController($root . "/config/config.php"))->listStrings();
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/i18n/strings") {
+    (new LocalizationAdminController($root . "/config/config.php"))->createString();
+    exit;
+}
+if (($method === "PUT" || $method === "POST") && $path === "/api/admin/i18n/translations") {
+    (new LocalizationAdminController($root . "/config/config.php"))->saveTranslation();
     exit;
 }
 if ($method === "GET" && $path === "/api/admin/tools/status") {
@@ -398,6 +424,18 @@ if ($method === "POST" && preg_match("#^/api/admin/media/(\d+)/tags/remove$#", $
 }
 if ($method === "POST" && preg_match("#^/api/admin/media/(\d+)/tags/restore$#", $path, $m)) {
     (new MediaTagsController($root . "/config/config.php"))->restore((int)$m[1]);
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/media/tags/batch/preview") {
+    (new MediaTagsController($root . "/config/config.php"))->batchPreview();
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/media/tags/batch") {
+    (new MediaTagsController($root . "/config/config.php"))->batchEdit();
+    exit;
+}
+if ($method === "GET" && $path === "/api/admin/media/tag-edits") {
+    (new MediaTagsController($root . "/config/config.php"))->history();
     exit;
 }
 if ($method === "GET" && preg_match("#^/api/file/(\\d+)$#", $path, $m)) {

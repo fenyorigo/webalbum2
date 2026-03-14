@@ -1,30 +1,30 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1>My Favorites</h1>
-      <p>Your starred images.</p>
+      <h1>{{ $t("favorites.title", "My Favorites") }}</h1>
+      <p>{{ $t("favorites.description", "Your starred images.") }}</p>
     </header>
 
     <section class="panel">
       <div class="row">
         <label>
-          Sort
+          {{ $t("favorites.sort", "Sort") }}
           <select v-model="sort">
-            <option value="date_new">Date New-Old</option>
-            <option value="date_old">Date Old-New</option>
-            <option value="name_asc">Name A-Z</option>
-            <option value="name_desc">Name Z-A</option>
+            <option value="date_new">{{ $t("sort.date_new_old", "Date New-Old") }}</option>
+            <option value="date_old">{{ $t("sort.date_old_new", "Date Old-New") }}</option>
+            <option value="name_asc">{{ $t("sort.name_az", "Name A-Z") }}</option>
+            <option value="name_desc">{{ $t("sort.name_za", "Name Z-A") }}</option>
           </select>
         </label>
         <label>
-          Limit
+          {{ $t("misc.limit", "Limit") }}
           <input v-model.number="limit" type="number" min="1" max="200" />
         </label>
         <label>
-          View
+          {{ $t("search.view", "View") }}
           <select v-model="viewMode">
-            <option value="list">List</option>
-            <option value="grid">Grid</option>
+            <option value="list">{{ $t("common.view_mode.list", "List") }}</option>
+            <option value="grid">{{ $t("common.view_mode.grid", "Grid") }}</option>
           </select>
         </label>
       </div>
@@ -32,9 +32,9 @@
 
     <section class="results">
       <div class="meta">
-        <span v-if="loading">Loading…</span>
-        <span v-else-if="total === null">Results: —</span>
-        <span v-else>Results: {{ results.length }} of {{ total }} ({{ total }} images)</span>
+        <span v-if="loading">{{ $t("common.loading", "Loading...") }}</span>
+        <span v-else-if="total === null">{{ $t("search.results_empty", "Results: —") }}</span>
+        <span v-else>{{ $t("results.title", "Results") }}: {{ results.length }} of {{ total }} ({{ total }} {{ $t("results.images", "images") }})</span>
       </div>
       <results-list
         v-if="viewMode === 'list'"
@@ -98,6 +98,7 @@ import ResultsGrid from "../components/ResultsGrid.vue";
 import ResultsList from "../components/ResultsList.vue";
 import ImageViewer from "../components/ImageViewer.vue";
 import VideoViewer from "../components/VideoViewer.vue";
+import { apiErrorMessage } from "../api-errors";
 
 export default {
   name: "FavoritesPage",
@@ -248,7 +249,7 @@ export default {
         const data = await res.json();
         if (!res.ok) {
           row.is_favorite = prev;
-          this.showToast(data.error || "Failed to toggle favorite");
+          this.showToast(apiErrorMessage(data.error, "search.favorite_toggle_failed", "Failed to toggle favorite"));
           return;
         }
         row.is_favorite = !!data.is_favorite;
@@ -257,16 +258,16 @@ export default {
         }
       } catch (err) {
         row.is_favorite = prev;
-        this.showToast("Failed to toggle favorite");
+        this.showToast(this.$t("search.favorite_toggle_failed", "Failed to toggle favorite"));
       }
     },
     async requestTrash(row) {
       if (!this.isAdmin || !row || !row.id) {
         return;
       }
-      const ok = window.confirm(`Move to Trash?
+      const ok = window.confirm(`${this.$t("viewer.move_to_trash", "Move to Trash")}?
 ${row.path || row.rel_path || row.id}
-This is reversible from Admin -> Trash.`);
+${this.$t("viewer.trash_reversible", "This is reversible from Admin -> Trash.")}`);
       if (!ok) {
         return;
       }
@@ -281,13 +282,13 @@ This is reversible from Admin -> Trash.`);
         }
         const data = await res.json();
         if (!res.ok) {
-          this.showToast(data.error || "Failed to move to trash");
+          this.showToast(apiErrorMessage(data.error, "search.trash_failed", "Failed to move to trash"));
           return;
         }
-        this.showToast("Moved to Trash");
+        this.showToast(this.$t("search.trash_moved", "Moved to Trash"));
         await this.fetchFavorites();
       } catch (_e) {
-        this.showToast("Failed to move to trash");
+        this.showToast(this.$t("search.trash_failed", "Failed to move to trash"));
       }
     },
     showToast(message) {
@@ -329,7 +330,7 @@ This is reversible from Admin -> Trash.`);
     },
     openObjectPage(row) {
       if (!row || !row.id) {
-        this.showToast("Object reference missing");
+        this.showToast(this.$t("search.object_ref_missing", "Object reference missing"));
         return;
       }
       this.viewerOpen = false;
@@ -347,7 +348,7 @@ This is reversible from Admin -> Trash.`);
     async onItemTrashed() {
       this.viewerOpen = false;
       this.videoViewerOpen = false;
-      this.showToast("Moved to Trash");
+      this.showToast(this.$t("search.trash_moved", "Moved to Trash"));
       await this.fetchFavorites();
     }
   }

@@ -8,6 +8,49 @@ use WebAlbum\Db\Maria;
 
 final class MediaTagEdits
 {
+    public static function insertBatch(
+        Maria $maria,
+        int $createdBy,
+        int $requestedCount,
+        ?string $addTag,
+        array $removeTags
+    ): int {
+        $maria->exec(
+            "INSERT INTO wa_object_tag_edit_batches
+                (created_by_user_id, requested_count, add_tag, remove_tags_json, status)
+             VALUES (?, ?, ?, ?, 'queued')",
+            [
+                $createdBy,
+                max(0, $requestedCount),
+                $addTag,
+                json_encode(array_values($removeTags), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ]
+        );
+        return $maria->lastInsertId();
+    }
+
+    public static function updateBatchSummary(
+        Maria $maria,
+        int $batchId,
+        int $queuedCount,
+        int $skippedCount,
+        int $failedCount
+    ): void {
+        $status = 'queued';
+        if ($queuedCount < 1 && $failedCount > 0 && $skippedCount < 1) {
+            $status = 'error';
+        } elseif ($failedCount > 0 || $skippedCount > 0) {
+            $status = 'partial';
+        }
+
+        $maria->exec(
+            "UPDATE wa_object_tag_edit_batches
+             SET queued_count = ?, skipped_count = ?, failed_count = ?, status = ?, updated_at = NOW()
+             WHERE id = ?",
+            [$queuedCount, $skippedCount, $failedCount, $status, $batchId]
+        );
+    }
+
     public static function findBackupByRelPath(Maria $maria, string $relPath): ?array
     {
         $rows = $maria->query(
@@ -86,13 +129,15 @@ final class MediaTagEdits
         ?string $tagValue,
         array $oldTags,
         ?array $newTags,
-        int $createdBy
+        int $createdBy,
+        ?int $batchId = null
     ): int {
         $maria->exec(
             "INSERT INTO wa_object_tag_edits
-                (backup_id, object_id, rel_path, action_type, tag_value, old_tags_json, new_tags_json, status, created_by_user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)",
+                (batch_id, backup_id, object_id, rel_path, action_type, tag_value, old_tags_json, new_tags_json, status, created_by_user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)",
             [
+                ($batchId !== null && $batchId > 0) ? $batchId : null,
                 $backupId,
                 ($objectId !== null && $objectId > 0) ? $objectId : null,
                 $relPath,

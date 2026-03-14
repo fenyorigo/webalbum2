@@ -1,14 +1,14 @@
 <template>
   <div class="folder-tree panel">
     <div class="folder-head">
-      <h3>Folders</h3>
-      <button v-if="selectedRelPath" class="clear" type="button" @click="clearSelection">Clear</button>
+      <h3>{{ $t("folders.title", "Folders") }}</h3>
+      <button v-if="selectedRelPath" class="clear" type="button" @click="clearSelection">{{ $t("ui.clear", "Clear") }}</button>
     </div>
 
     <p v-if="selectedRelPath" class="selected" :title="selectedRelPath">{{ selectedRelPath }}</p>
-    <p v-if="loading" class="muted">Loading folders…</p>
+    <p v-if="loading" class="muted">{{ $t("folders.loading", "Loading folders...") }}</p>
     <p v-else-if="error" class="error">{{ error }}</p>
-    <p v-else-if="rows.length === 0" class="muted">No folders indexed</p>
+    <p v-else-if="rows.length === 0" class="muted">{{ $t("folders.empty", "No folders indexed") }}</p>
 
     <div v-else class="tree-list">
       <div
@@ -23,7 +23,7 @@
           type="button"
           :disabled="!row.has_children"
           @click="toggle(row)"
-          :aria-label="expanded[row.key || row.rel_path] ? 'Collapse folder' : 'Expand folder'"
+          :aria-label="expanded[row.key || row.rel_path] ? $t('folders.collapse', 'Collapse folder') : $t('folders.expand', 'Expand folder')"
         >
           <span v-if="row.has_children">{{ expanded[row.key || row.rel_path] ? '▾' : '▸' }}</span>
         </button>
@@ -36,6 +36,8 @@
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "FolderTree",
   props: {
@@ -77,12 +79,12 @@ export default {
         const res = await fetch("/api/tree/roots");
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to load folders";
+          this.error = apiErrorMessage(data.error, "folders.load_failed", "Failed to load folders");
           return;
         }
         this.roots = Array.isArray(data) ? data : [];
       } catch (err) {
-        this.error = "Failed to load folders";
+        this.error = this.$t("folders.load_failed", "Failed to load folders");
       } finally {
         this.loading = false;
       }
@@ -95,7 +97,7 @@ export default {
       const res = await fetch(`/api/tree?${qs.toString()}`);
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to load child folders");
+        throw new Error(apiErrorMessage(data.error, "folders.children_load_failed", "Failed to load child folders"));
       }
       this.childrenByParent = {
         ...this.childrenByParent,
@@ -115,7 +117,7 @@ export default {
         await this.loadChildren(row.rel_path);
         this.expanded = { ...this.expanded, [nodeKey]: true };
       } catch (err) {
-        this.error = err.message || "Failed to load child folders";
+        this.error = err.message || this.$t("folders.children_load_failed", "Failed to load child folders");
       }
     },
     selectRow(row) {

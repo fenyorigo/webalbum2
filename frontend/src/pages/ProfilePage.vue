@@ -1,68 +1,78 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1>My Profile</h1>
-      <p>Adjust your default preferences.</p>
+      <h1>{{ $t("profile.title", "My Profile") }}</h1>
+      <p>{{ $t("profile.subtitle", "Adjust your default preferences.") }}</p>
     </header>
 
     <section class="panel">
       <div class="row">
         <label>
-          Default view
+          {{ $t("profile.default_view", "Default view") }}
           <select v-model="prefs.default_view">
-            <option value="grid">Grid</option>
-            <option value="list">List</option>
+            <option value="grid">{{ $t("common.view_mode.grid", "Grid") }}</option>
+            <option value="list">{{ $t("common.view_mode.list", "List") }}</option>
           </select>
         </label>
         <label>
-          Page size
+          {{ $t("profile.page_size", "Page size") }}
           <input v-model.number="prefs.page_size" type="number" min="10" max="200" />
         </label>
         <label>
-          Thumb size
+          {{ $t("profile.thumb_size", "Thumb size") }}
           <input v-model.number="prefs.thumb_size" type="number" min="100" max="400" />
         </label>
         <label>
-          Sort mode
+          {{ $t("profile.sort_mode", "Sort mode") }}
           <select v-model="prefs.sort_mode">
-            <option value="name_az">Name A-Z</option>
-            <option value="name_za">Name Z-A</option>
-            <option value="date_new_old">Date New-Old</option>
-            <option value="date_old_new">Date Old-New</option>
+            <option value="name_az">{{ $t("sort.name_az", "Name A-Z") }}</option>
+            <option value="name_za">{{ $t("sort.name_za", "Name Z-A") }}</option>
+            <option value="date_new_old">{{ $t("sort.date_new_old", "Date New-Old") }}</option>
+            <option value="date_old_new">{{ $t("sort.date_old_new", "Date Old-New") }}</option>
+          </select>
+        </label>
+        <label>
+          {{ $t("profile.ui_language", "UI language") }}
+          <select v-model="prefs.ui_language">
+            <option v-for="lang in languageOptions" :key="lang.code" :value="lang.code">
+              {{ lang.name_native || lang.name_en || lang.code }}
+            </option>
           </select>
         </label>
       </div>
       <div class="row actions">
-        <button @click="save" :disabled="loading">Save</button>
+        <button @click="save" :disabled="loading">{{ $t("profile.save", "Save") }}</button>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
-      <p v-if="saved" class="pill">Saved</p>
+      <p v-if="saved" class="pill">{{ $t("profile.saved", "Saved") }}</p>
     </section>
 
     <section class="panel">
-      <h3>Change password</h3>
+      <h3>{{ $t("profile.change_password", "Change password") }}</h3>
       <label>
-        Current password
+        {{ $t("profile.current_password", "Current password") }}
         <input v-model="password.current" type="password" autocomplete="current-password" />
       </label>
       <label>
-        New password
+        {{ $t("profile.new_password", "New password") }}
         <input v-model="password.next" type="password" autocomplete="new-password" />
       </label>
       <label>
-        Confirm password
+        {{ $t("profile.confirm_password", "Confirm password") }}
         <input v-model="password.confirm" type="password" autocomplete="new-password" />
       </label>
       <div class="row actions">
-        <button @click="changePassword" :disabled="loading">Update password</button>
+        <button @click="changePassword" :disabled="loading">{{ $t("profile.update_password", "Update password") }}</button>
       </div>
       <p v-if="passwordError" class="error">{{ passwordError }}</p>
-      <p v-if="passwordSaved" class="pill">Password updated</p>
+      <p v-if="passwordSaved" class="pill">{{ $t("profile.password_updated", "Password updated") }}</p>
     </section>
   </div>
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "ProfilePage",
   data() {
@@ -71,7 +81,8 @@ export default {
         default_view: "grid",
         page_size: 50,
         thumb_size: 180,
-        sort_mode: "name_az"
+        sort_mode: "name_az",
+        ui_language: "en"
       },
       password: {
         current: "",
@@ -88,6 +99,18 @@ export default {
   mounted() {
     this.loadPrefs();
   },
+  computed: {
+    languageOptions() {
+      const i18n = this.$i18n || null;
+      if (i18n && Array.isArray(i18n.supported_languages) && i18n.supported_languages.length) {
+        return i18n.supported_languages;
+      }
+      return [
+        { code: "en", name_en: "English", name_native: "English" },
+        { code: "hu", name_en: "Hungarian", name_native: "Magyar" }
+      ];
+    }
+  },
   methods: {
     async loadPrefs() {
       this.loading = true;
@@ -99,7 +122,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to load preferences";
+          this.error = apiErrorMessage(data.error, "profile.load_failed", "Failed to load preferences");
           return;
         }
         this.prefs = data;
@@ -124,12 +147,13 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to save preferences";
+          this.error = apiErrorMessage(data.error, "profile.save_failed", "Failed to save preferences");
           return;
         }
         this.prefs = data;
         this.saved = true;
         window.dispatchEvent(new CustomEvent("wa-prefs-changed", { detail: data }));
+        window.dispatchEvent(new CustomEvent("wa-prefs-refresh"));
       } catch (err) {
         this.error = "Failed to save preferences";
       } finally {
@@ -171,7 +195,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.passwordError = data.error || "Password change failed";
+          this.passwordError = apiErrorMessage(data.error, "profile.password_change_failed", "Password change failed");
           return;
         }
         this.passwordSaved = true;

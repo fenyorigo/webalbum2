@@ -1,15 +1,15 @@
 <template>
   <div class="page">
     <header class="hero">
-      <h1>Trash</h1>
-      <p>Review trashed media. Restore or permanently delete.</p>
+      <h1>{{ $t("trash.title", "Trash") }}</h1>
+      <p>{{ $t("trash.description", "Review trashed media. Restore or permanently delete.") }}</p>
     </header>
 
     <section class="panel">
       <div class="toolbar">
-        <div class="summary">Total: {{ total }} entries • Page {{ page }} of {{ totalPages }}</div>
+        <div class="summary">Total: {{ total }} {{ $t("audit.entries", "entries") }} • {{ $t("audit.page_of", { x: page, y: totalPages }, "Page {x} of {y}") }}</div>
         <label>
-          Page size
+          {{ $t("misc.limit", "Limit") }}
           <select v-model.number="pageSize" @change="applyFilters">
             <option :value="25">25</option>
             <option :value="50">50</option>
@@ -20,44 +20,44 @@
 
       <div class="filters">
         <label>
-          Path contains
+          {{ $t("search.path_contains", "Path contains") }}
           <input v-model.trim="filters.q" type="text" placeholder="2020/IMG_" />
         </label>
         <label>
-          Sort
+          {{ $t("search.sort", "Sort") }}
           <select v-model="filters.sort">
-            <option value="deleted_at_desc">Trashed time (newest first)</option>
-            <option value="deleted_at_asc">Trashed time (oldest first)</option>
+            <option value="deleted_at_desc">{{ $t("trash.sort.deleted_new", "Trashed time (newest first)") }}</option>
+            <option value="deleted_at_asc">{{ $t("trash.sort.deleted_old", "Trashed time (oldest first)") }}</option>
           </select>
         </label>
         <div class="filter-actions">
-          <button class="inline" :disabled="loading" @click="applyFilters">Apply</button>
-          <button class="inline" :disabled="loading" @click="clearFilters">Clear</button>
+          <button class="inline" :disabled="loading" @click="applyFilters">{{ $t("ui.apply", "Apply") }}</button>
+          <button class="inline" :disabled="loading" @click="clearFilters">{{ $t("ui.clear", "Clear") }}</button>
         </div>
       </div>
 
       <div class="bulk-actions" v-if="items.length">
-        <span class="selected">Selected: {{ selectedIds.length }}</span>
+        <span class="selected">{{ $t("common.selected", "Selected") }}: {{ selectedIds.length }}</span>
         <button class="inline" :disabled="loading || selectedIds.length === 0" @click="openBulkConfirm('restore')">
-          Restore selected
+          {{ $t("trash.restore_selected", "Restore selected") }}
         </button>
         <button class="inline danger" :disabled="loading || selectedIds.length === 0" @click="openBulkConfirm('purge')">
-          Purge selected
+          {{ $t("trash.purge_selected", "Purge selected") }}
         </button>
         <button class="inline danger" :disabled="loading || total === 0" @click="openBulkConfirm('empty')">
-          Empty trash
+          {{ $t("trash.empty_action", "Empty trash") }}
         </button>
-        <button class="inline" v-if="selectedIds.length" @click="clearSelection">Unselect all</button>
+        <button class="inline" v-if="selectedIds.length" @click="clearSelection">{{ $t("search.unselect_all", "Unselect all") }}</button>
       </div>
 
       <div class="pager" v-if="total > 0">
-        <button :disabled="page === 1 || loading" @click="prevPage">Previous</button>
-        <span>Page {{ page }} of {{ totalPages }}</span>
-        <button :disabled="page >= totalPages || loading" @click="nextPage">Next</button>
+        <button :disabled="page === 1 || loading" @click="prevPage">{{ $t("ui.previous", "Previous") }}</button>
+        <span>{{ $t("audit.page_of", { x: page, y: totalPages }, "Page {x} of {y}") }}</span>
+        <button :disabled="page >= totalPages || loading" @click="nextPage">{{ $t("ui.next", "Next") }}</button>
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
-      <p v-if="!loading && items.length === 0" class="muted">Trash is empty.</p>
+      <p v-if="!loading && items.length === 0" class="muted">{{ $t("trash.empty", "Trash is empty.") }}</p>
 
       <table v-if="items.length" class="tags-table trash-table">
         <thead>
@@ -65,11 +65,11 @@
             <th>
               <input type="checkbox" :checked="allSelectedOnPage" @change="toggleSelectAll($event.target.checked)" />
             </th>
-            <th>Thumb</th>
-            <th>Filename</th>
-            <th>Type</th>
-            <th>Trashed at</th>
-            <th>Trashed by</th>
+            <th>{{ $t("common.thumbnail", "Thumbnail") }}</th>
+            <th>{{ $t("common.filename", "Filename") }}</th>
+            <th>{{ $t("common.type", "Type") }}</th>
+            <th>{{ $t("trash.trashed_at", "Trashed at") }}</th>
+            <th>{{ $t("trash.trashed_by", "Trashed by") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -95,9 +95,9 @@
       </table>
 
       <div class="pager" v-if="total > 0">
-        <button :disabled="page === 1 || loading" @click="prevPage">Previous</button>
-        <span>Page {{ page }} of {{ totalPages }}</span>
-        <button :disabled="page >= totalPages || loading" @click="nextPage">Next</button>
+        <button :disabled="page === 1 || loading" @click="prevPage">{{ $t("ui.previous", "Previous") }}</button>
+        <span>{{ $t("audit.page_of", { x: page, y: totalPages }, "Page {x} of {y}") }}</span>
+        <button :disabled="page >= totalPages || loading" @click="nextPage">{{ $t("ui.next", "Next") }}</button>
       </div>
     </section>
 
@@ -106,12 +106,12 @@
         <h3>{{ confirmTitle }}</h3>
         <p>{{ confirmMessage }}</p>
         <label v-if="confirmNeedsType">
-          Type <strong>PURGE</strong> to continue
+          {{ $t("trash.type_purge", "Type PURGE to continue") }}
           <input v-model.trim="confirmInput" type="text" />
         </label>
         <div class="modal-actions">
-          <button class="inline" :disabled="confirmNeedsType && confirmInput !== 'PURGE'" @click="executeConfirm">Confirm</button>
-          <button class="inline" @click="closeConfirm">Cancel</button>
+          <button class="inline" :disabled="confirmNeedsType && confirmInput !== 'PURGE'" @click="executeConfirm">{{ $t("common.confirm", "Confirm") }}</button>
+          <button class="inline" @click="closeConfirm">{{ $t("ui.cancel", "Cancel") }}</button>
         </div>
       </div>
     </div>
@@ -121,13 +121,13 @@
         <h3>{{ resultTitle }}</h3>
         <p>{{ resultSummary }}</p>
         <div v-if="resultErrors.length">
-          <strong>Errors</strong>
+          <strong>{{ $t("common.error", "Error") }}s</strong>
           <ul class="errors-list">
             <li v-for="(e, idx) in resultErrors" :key="idx">#{{ e.id }}: {{ e.error }}</li>
           </ul>
         </div>
         <div class="modal-actions">
-          <button class="inline" @click="closeResult">Close</button>
+          <button class="inline" @click="closeResult">{{ $t("ui.close", "Close") }}</button>
         </div>
       </div>
     </div>
@@ -137,6 +137,8 @@
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "TrashPage",
   data() {
@@ -180,21 +182,21 @@ export default {
     },
     confirmTitle() {
       if (this.confirmAction === "restore") {
-        return "Restore selected";
+        return this.$t("trash.confirm_restore_title", "Restore selected");
       }
       if (this.confirmAction === "purge") {
-        return "Purge selected";
+        return this.$t("trash.confirm_purge_title", "Purge selected");
       }
-      return "Empty trash";
+      return this.$t("trash.confirm_empty_title", "Empty trash");
     },
     confirmMessage() {
       if (this.confirmAction === "restore") {
-        return `Restore ${this.selectedIds.length} items back to the library?`;
+        return this.$t("trash.confirm_restore_body", { count: this.selectedIds.length }, "Restore {count} items back to the library?");
       }
       if (this.confirmAction === "purge") {
-        return `Permanently delete ${this.selectedIds.length} items from Trash? This cannot be undone.`;
+        return this.$t("trash.confirm_purge_body", { count: this.selectedIds.length }, "Permanently delete {count} items from Trash? This cannot be undone.");
       }
-      return "Permanently delete all current trash items? This cannot be undone.";
+      return this.$t("trash.confirm_empty_body", "Permanently delete all current trash items? This cannot be undone.");
     }
   },
   mounted() {
@@ -228,7 +230,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to load trash";
+          this.error = apiErrorMessage(data.error, "trash.load_failed", "Failed to load trash");
           return;
         }
         this.items = Array.isArray(data.items) ? data.items : [];
@@ -237,7 +239,7 @@ export default {
         this.pageSize = Number(data.page_size || this.pageSize);
         this.selectedIds = this.selectedIds.filter((id) => this.items.some((r) => r.trash_id === id));
       } catch (_e) {
-        this.error = "Failed to load trash";
+        this.error = this.$t("trash.load_failed", "Failed to load trash");
       } finally {
         this.loading = false;
       }
@@ -333,7 +335,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok && res.status !== 207) {
-          this.error = data.error || "Operation failed";
+          this.error = apiErrorMessage(data.error, "common.operation_failed", "Operation failed");
           return;
         }
 
@@ -352,7 +354,7 @@ export default {
         this.clearSelection();
         await this.fetchTrash();
       } catch (_e) {
-        this.error = "Operation failed";
+        this.error = this.$t("common.operation_failed", "Operation failed");
       } finally {
         this.loading = false;
       }

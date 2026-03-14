@@ -1,6 +1,6 @@
 <template>
   <section class="panel picker">
-    <h2>Select a profile</h2>
+    <h2>{{ $t("profile_picker.title", "Select a profile") }}</h2>
     <div class="picker-list" v-if="users.length">
       <button
         v-for="user in users"
@@ -12,12 +12,14 @@
         {{ user.display_name }}
       </button>
     </div>
-    <p v-else class="empty">No users found. Seed wa_users first.</p>
+    <p v-else class="empty">{{ $t("profile_picker.empty", "No users found. Seed wa_users first.") }}</p>
     <p v-if="error" class="error">{{ error }}</p>
   </section>
 </template>
 
 <script>
+import { apiErrorMessage } from "../api-errors";
+
 export default {
   name: "ProfilePicker",
   emits: ["selected"],
@@ -36,7 +38,7 @@ export default {
         const res = await fetch("/api/users");
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to load users";
+          this.error = apiErrorMessage(data.error, "profile_picker.load_failed", "Failed to load users");
           return;
         }
         this.users = data;
@@ -53,7 +55,7 @@ export default {
         });
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Failed to select user";
+          this.error = apiErrorMessage(data.error, "profile_picker.select_failed", "Failed to select user");
           return;
         }
         this.$emit("selected", data.user || null);

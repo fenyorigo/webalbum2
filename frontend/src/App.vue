@@ -2,42 +2,43 @@
   <div id="app">
     <nav class="top">
       <div class="brand">
-        Family memories
-        <span class="version">v2.1.0</span>
+        {{ $t("app.brand", "Family memories") }}
+        <span class="version">v2.2.0</span>
       </div>
       <div class="links" v-if="currentUser">
-        <router-link to="/" class="link" active-class="active" exact-active-class="active">Search</router-link>
-        <router-link to="/tags" class="link" active-class="active">Tags</router-link>
-        <router-link to="/favorites" class="link" active-class="active">My Favorites</router-link>
-        <router-link to="/saved-searches" class="link" active-class="active">Saved searches</router-link>
-        <router-link to="/profile" class="link" active-class="active">My Profile</router-link>
-        <router-link to="/my-proposals" class="link" active-class="active">My Proposals</router-link>
-        <router-link to="/my-notes" class="link" active-class="active">My Notes</router-link>
+        <router-link to="/" class="link" active-class="active" exact-active-class="active">{{ $t("nav.search", "Search") }}</router-link>
+        <router-link to="/tags" class="link" active-class="active">{{ $t("nav.tags", "Tags") }}</router-link>
+        <router-link to="/favorites" class="link" active-class="active">{{ $t("nav.favorites", "My Favorites") }}</router-link>
+        <router-link to="/saved-searches" class="link" active-class="active">{{ $t("nav.saved_searches", "Saved searches") }}</router-link>
+        <router-link to="/profile" class="link" active-class="active">{{ $t("nav.profile", "My Profile") }}</router-link>
+        <router-link to="/my-proposals" class="link" active-class="active">{{ $t("nav.my_proposals", "My Proposals") }}</router-link>
+        <router-link to="/my-notes" class="link" active-class="active">{{ $t("nav.my_notes", "My Notes") }}</router-link>
         <div v-if="currentUser.is_admin" class="admin-menu">
           <button class="link admin-toggle" type="button" @click="toggleAdmin">
-            Admin ▾
+            {{ $t("nav.admin", "Admin") }} ▾
             <span v-if="activeObjectJobs > 0" class="mini-badge" :title="`${activeObjectJobs} active object transform jobs`">
               {{ activeObjectJobs }}
             </span>
           </button>
           <div v-if="adminOpen" class="admin-dropdown">
             <button type="button" @click="openTagsAdmin">Tags</button>
-            <button type="button" @click="openUserManagement">User management</button>
-            <button type="button" @click="openLogs">View logs</button>
-            <button type="button" @click="openTrash">Trash</button>
-            <button type="button" @click="openAssetsPage">Assets</button>
-            <button type="button" @click="openObjectProposals">Object proposals</button>
-            <button type="button" @click="scanAssets">Scan documents and audio</button>
-            <button type="button" @click="openJobStatus">Job status</button>
-            <button type="button" @click="openRequiredTools">Required tools</button>
-            <button type="button" @click="runCleanStructure">Clean structure</button>
-            <button type="button" @click="openManageThumbs">Manage thumbs</button>
+            <button type="button" @click="openUserManagement">{{ $t("admin.user_management", "User management") }}</button>
+            <button type="button" @click="openLogs">{{ $t("admin.logs.view", "View logs") }}</button>
+            <button type="button" @click="openTrash">{{ $t("admin.trash", "Trash") }}</button>
+            <button type="button" @click="openAssetsPage">{{ $t("admin.assets", "Assets") }}</button>
+            <button type="button" @click="openObjectProposals">{{ $t("admin.object_proposals", "Object proposals") }}</button>
+            <button type="button" @click="openLocalizationAdmin">{{ $t("admin.localization", "Localization") }}</button>
+            <button type="button" @click="scanAssets">{{ $t("admin.scan_documents_audio", "Scan documents and audio") }}</button>
+            <button type="button" @click="openJobStatus">{{ $t("admin.job_status", "Job status") }}</button>
+            <button type="button" @click="openRequiredTools">{{ $t("admin.required_tools", "Required tools") }}</button>
+            <button type="button" @click="runCleanStructure">{{ $t("admin.clean_structure", "Clean structure") }}</button>
+            <button type="button" @click="openManageThumbs">{{ $t("admin.manage_thumbs", "Manage thumbs") }}</button>
           </div>
         </div>
       </div>
       <div class="user" v-if="currentUser">
         <span>User: {{ currentUser.display_name }}</span>
-        <button class="switch" type="button" @click="logout">Logout</button>
+        <button class="switch" type="button" @click="logout">{{ $t("nav.logout", "Logout") }}</button>
       </div>
     </nav>
     <div v-if="currentUser && currentUser.is_admin && toolWarnings.length" class="admin-warning">
@@ -68,7 +69,7 @@
     </div>
     <div v-if="usersOpen" class="modal-backdrop" @click.self="closeUserManagement">
       <div class="modal user-modal">
-        <h3>User management</h3>
+        <h3>{{ $t("admin.user_management", "User management") }}</h3>
         <table class="tags-table">
           <thead>
             <tr>
@@ -77,7 +78,7 @@
               <th>Display Name</th>
               <th>Active</th>
               <th>Admin</th>
-              <th>Actions</th>
+              <th>{{ $t("object.action", "Action") }}</th>
             </tr>
           </thead>
           <tbody>
@@ -103,7 +104,7 @@
           <button class="inline" :disabled="!usersDirty || loading" @click="saveUserFlags">
             Save changes
           </button>
-          <button class="inline" @click="closeUserManagement">Close</button>
+          <button class="inline" @click="closeUserManagement">{{ $t("ui.close", "Close") }}</button>
         </div>
         <p v-if="adminError" class="error">{{ adminError }}</p>
       </div>
@@ -158,68 +159,68 @@
 
     <div v-if="toolsOpen" class="modal-backdrop" @click.self="closeRequiredTools">
       <div class="modal tools-modal">
-        <h3>Required tools</h3>
+        <h3>{{ $t("admin.required_tools", "Required tools") }}</h3>
         <table class="tags-table tools-table">
           <thead>
             <tr>
               <th>Tool</th>
-              <th>Status</th>
-              <th>Resolved path</th>
+              <th>{{ $t("object.status", "Status") }}</th>
+              <th>{{ $t("misc.resolved_path", "Resolved path") }}</th>
               <th>Version</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td>exiftool</td>
-              <td>{{ toolAvailable("exiftool") ? "Found" : "Missing" }}</td>
+              <td>{{ toolAvailable("exiftool") ? $t("status.found", "Found") : "Missing" }}</td>
               <td>{{ toolResolvedPath("exiftool") }}</td>
               <td>{{ toolVersion("exiftool") }}</td>
             </tr>
             <tr>
               <td>ffmpeg</td>
-              <td>{{ toolAvailable("ffmpeg") ? "Found" : "Missing" }}</td>
+              <td>{{ toolAvailable("ffmpeg") ? $t("status.found", "Found") : "Missing" }}</td>
               <td>{{ toolResolvedPath("ffmpeg") }}</td>
               <td>{{ toolVersion("ffmpeg") }}</td>
             </tr>
             <tr>
               <td>ffprobe</td>
-              <td>{{ toolAvailable("ffprobe") ? "Found" : "Missing" }}</td>
+              <td>{{ toolAvailable("ffprobe") ? $t("status.found", "Found") : "Missing" }}</td>
               <td>{{ toolResolvedPath("ffprobe") }}</td>
               <td>{{ toolVersion("ffprobe") }}</td>
             </tr>
             <tr>
               <td>soffice</td>
-              <td>{{ toolAvailable("soffice") ? "Found" : "Missing" }}</td>
+              <td>{{ toolAvailable("soffice") ? $t("status.found", "Found") : "Missing" }}</td>
               <td>{{ toolResolvedPath("soffice") }}</td>
               <td>{{ toolVersion("soffice") }}</td>
             </tr>
             <tr>
               <td>gs</td>
-              <td>{{ toolAvailable("gs") ? "Found" : "Missing" }}</td>
+              <td>{{ toolAvailable("gs") ? $t("status.found", "Found") : "Missing" }}</td>
               <td>{{ toolResolvedPath("gs") }}</td>
               <td>{{ toolVersion("gs") }}</td>
             </tr>
             <tr>
               <td>imagemagick</td>
-              <td>{{ toolAvailable("imagemagick") ? "Found" : "Missing" }}</td>
+              <td>{{ toolAvailable("imagemagick") ? $t("status.found", "Found") : "Missing" }}</td>
               <td>{{ toolResolvedPath("imagemagick") }}</td>
               <td>{{ toolVersion("imagemagick") }}</td>
             </tr>
             <tr>
               <td>pecl</td>
-              <td>{{ toolAvailable("pecl") ? "Found" : "Missing" }}</td>
+              <td>{{ toolAvailable("pecl") ? $t("status.found", "Found") : "Missing" }}</td>
               <td>{{ toolResolvedPath("pecl") }}</td>
               <td>{{ toolVersion("pecl") }}</td>
             </tr>
             <tr>
               <td>php-imagick</td>
-              <td>{{ toolAvailable("imagick_ext") ? "Found" : "Missing" }}</td>
+              <td>{{ toolAvailable("imagick_ext") ? $t("status.found", "Found") : "Missing" }}</td>
               <td>{{ toolResolvedPath("imagick_ext") }}</td>
               <td>{{ toolVersion("imagick_ext") }}</td>
             </tr>
             <tr>
               <td>imagemagick-heic</td>
-              <td>{{ toolAvailable("imagemagick_heic") ? "Found" : "Missing" }}</td>
+              <td>{{ toolAvailable("imagemagick_heic") ? $t("status.found", "Found") : "Missing" }}</td>
               <td>{{ toolResolvedPath("imagemagick_heic") }}</td>
               <td>{{ toolVersion("imagemagick_heic") }}</td>
             </tr>
@@ -268,9 +269,9 @@
           </label>
         </div>
         <div class="modal-actions">
-          <button class="inline" @click="saveRequiredTools" :disabled="loading || !hasToolPathInput">Save paths</button>
-          <button class="inline" @click="recheckSystemTools" :disabled="loading">Recheck</button>
-          <button class="inline" @click="closeRequiredTools" :disabled="loading">Close</button>
+          <button class="inline" @click="saveRequiredTools" :disabled="loading || !hasToolPathInput">{{ $t("misc.save_paths", "Save paths") }}</button>
+          <button class="inline" @click="recheckSystemTools" :disabled="loading">{{ $t("misc.recheck", "Recheck") }}</button>
+          <button class="inline" @click="closeRequiredTools" :disabled="loading">{{ $t("ui.close", "Close") }}</button>
         </div>
         <p v-if="toolsError" class="error">{{ toolsError }}</p>
       </div>
@@ -278,12 +279,12 @@
 
     <div v-if="manageThumbsOpen" class="modal-backdrop" @click.self="closeManageThumbs">
       <div class="modal">
-        <h3>Manage thumbs</h3>
+        <h3>{{ $t("thumbs.maintenance", "Manage thumbs") }}</h3>
         <p class="muted">Maintenance actions for <code>WA_THUMBS_ROOT</code>.</p>
         <div class="modal-actions">
-          <button class="inline" @click="runPurgePlaceholderThumbs" :disabled="loading">Purge placeholder thumbs</button>
-          <button class="inline" @click="runClearAllThumbs" :disabled="loading">Clear all thumbs</button>
-          <button class="inline" @click="closeManageThumbs" :disabled="loading">Close</button>
+          <button class="inline" @click="runPurgePlaceholderThumbs" :disabled="loading">{{ $t("thumbs.purge_placeholder", "Purge placeholder thumbs") }}</button>
+          <button class="inline" @click="runClearAllThumbs" :disabled="loading">{{ $t("thumbs.clear_all", "Clear all thumbs") }}</button>
+          <button class="inline" @click="closeManageThumbs" :disabled="loading">{{ $t("ui.close", "Close") }}</button>
         </div>
       </div>
     </div>
@@ -292,7 +293,7 @@
       <div class="modal tools-modal">
         <div class="modal-header">
           <h3>Asset jobs</h3>
-          <button class="inline" type="button" @click="closeJobs">Close</button>
+          <button class="inline" type="button" @click="closeJobs">{{ $t("ui.close", "Close") }}</button>
         </div>
         <p v-if="jobsError" class="error">{{ jobsError }}</p>
         <div v-else>
@@ -337,7 +338,7 @@
     <div v-if="scanOpen" class="modal-backdrop" @click.self="closeScanModal">
       <div class="modal scan-modal">
         <div class="modal-header">
-          <h3>Scan documents and audio</h3>
+          <h3>{{ $t("admin.scan_documents_audio", "Scan documents and audio") }}</h3>
           <button
             class="inline"
             type="button"
@@ -379,7 +380,7 @@
             <button class="inline" :class="{ active: scanTab === 'ready' }" @click="scanTab = 'ready'">Ready</button>
             <button class="inline" :class="{ active: scanTab === 'no_processing' }" @click="scanTab = 'no_processing'">No processing needed</button>
             <button class="inline" :class="{ active: scanTab === 'failed' }" @click="scanTab = 'failed'">Failed</button>
-            <button class="inline" @click="refreshScanItems" :disabled="scanLoading">Refresh</button>
+            <button class="inline" @click="refreshScanItems" :disabled="scanLoading">{{ $t("ui.refresh", "Refresh") }}</button>
           </div>
           <table class="tags-table scan-table" v-if="scanRowsForTab.length">
             <thead>
@@ -388,7 +389,7 @@
                 <th>Type</th>
                 <th>Thumbnail</th>
                 <th>Preview</th>
-                <th>Status</th>
+                <th>{{ $t("object.status", "Status") }}</th>
               </tr>
             </thead>
             <tbody>
@@ -412,7 +413,7 @@
             >
               Clear list
             </button>
-            <button class="inline" type="button" @click="closeScanModal">Close</button>
+            <button class="inline" type="button" @click="closeScanModal">{{ $t("ui.close", "Close") }}</button>
           </div>
         </div>
 
@@ -423,28 +424,28 @@
     <div v-if="logsOpen" class="modal-backdrop" @click.self="closeLogs">
       <div class="modal logs-modal">
         <div class="modal-header">
-          <h3>Audit logs</h3>
-          <button class="inline close-btn" type="button" @click="closeLogs">Close</button>
+          <h3>{{ $t("audit.title", "Audit log details") }}</h3>
+          <button class="inline close-btn" type="button" @click="closeLogs">{{ $t("ui.close", "Close") }}</button>
         </div>
         <div class="logs-toolbar">
           <div class="summary" v-if="logsTotal !== null">
-            Total: {{ logsTotal }} entries • Page {{ logsPage }} of {{ logsTotalPages }}
+            Total: {{ logsTotal }} {{ $t("audit.entries", "entries") }} • {{ $t("audit.page_of", { x: logsPage, y: logsTotalPages }, "Page {x} of {y}") }}
           </div>
           <div class="controls">
             <label>
-              Page size
+              {{ $t("misc.limit", "Limit") }}
               <select v-model.number="logsPageSize" @change="applyLogsFilters">
                 <option :value="25">25</option>
                 <option :value="50">50</option>
                 <option :value="100">100</option>
               </select>
             </label>
-            <button class="inline" type="button" @click="exportLogsCsv" :disabled="loading">Export logs (CSV)</button>
+            <button class="inline" type="button" @click="exportLogsCsv" :disabled="loading">{{ $t("audit.export", "Export logs (CSV)") }}</button>
           </div>
         </div>
         <div class="logs-filters">
           <label>
-            Action
+            {{ $t("object.action", "Action") }}
             <select v-if="logsMetaOk" v-model="logsFilters.action">
               <option value="">(Any)</option>
               <option v-for="action in logsMeta.actions" :key="action" :value="action">{{ action }}</option>
@@ -452,7 +453,7 @@
             <input v-else v-model.trim="logsFilters.action" type="text" />
           </label>
           <label>
-            Source
+            {{ $t("audit.source", "Source") }}
             <select v-if="logsMetaOk" v-model="logsFilters.source">
               <option value="">(Any)</option>
               <option v-for="source in logsMeta.sources" :key="source" :value="source">{{ source }}</option>
@@ -460,7 +461,7 @@
             <input v-else v-model.trim="logsFilters.source" type="text" />
           </label>
           <label>
-            Actor
+            {{ $t("audit.actor", "Actor") }}
             <select v-if="logsMetaOk" v-model.number="logsFilters.actor_user_id">
               <option :value="0">(Any)</option>
               <option v-for="actor in logsMeta.actors" :key="actor.id" :value="actor.id">
@@ -470,7 +471,7 @@
             <input v-else v-model.trim="logsFilters.actor" type="text" />
           </label>
           <label>
-            Target
+            {{ $t("audit.target", "Target") }}
             <select v-if="logsMetaOk" v-model.number="logsFilters.target_user_id">
               <option :value="0">(Any)</option>
               <option v-for="target in logsMeta.targets" :key="target.id" :value="target.id">
@@ -480,19 +481,19 @@
             <input v-else v-model.trim="logsFilters.target" type="text" />
           </label>
           <div class="filter-actions">
-            <button class="inline" @click="applyLogsFilters" :disabled="loading">Apply</button>
-            <button class="inline" @click="clearLogsFilters" :disabled="loading">Clear</button>
+            <button class="inline" @click="applyLogsFilters" :disabled="loading">{{ $t("ui.apply", "Apply") }}</button>
+            <button class="inline" @click="clearLogsFilters" :disabled="loading">{{ $t("ui.clear", "Clear") }}</button>
           </div>
         </div>
         <div class="pager" v-if="logsTotal !== null">
-          <button :disabled="logsPage === 1 || loading" @click="prevLogs">Previous</button>
-          <span>Page {{ logsPage }} of {{ logsTotalPages }}</span>
+          <button :disabled="logsPage === 1 || loading" @click="prevLogs">{{ $t("ui.previous", "Previous") }}</button>
+          <span>{{ $t("audit.page_of", { x: logsPage, y: logsTotalPages }, "Page {x} of {y}") }}</span>
           <label class="jump">
             Jump
             <input v-model.number="logsJump" type="number" min="1" :max="logsTotalPages" />
           </label>
-          <button class="inline" @click="jumpLogs" :disabled="loading">Go</button>
-          <button :disabled="logsPage >= logsTotalPages || loading" @click="nextLogs">Next</button>
+          <button class="inline" @click="jumpLogs" :disabled="loading">{{ $t("ui.go", "Go") }}</button>
+          <button :disabled="logsPage >= logsTotalPages || loading" @click="nextLogs">{{ $t("ui.next", "Next") }}</button>
         </div>
         <p v-if="logsError" class="error">{{ logsError }}</p>
         <p v-if="logsTotal === 0" class="muted">No audit log entries yet.</p>
@@ -500,10 +501,10 @@
           <thead>
             <tr>
               <th>Time</th>
-              <th>Action</th>
-              <th>Source</th>
-              <th>Actor</th>
-              <th>Target</th>
+              <th>{{ $t("object.action", "Action") }}</th>
+              <th>{{ $t("audit.source", "Source") }}</th>
+              <th>{{ $t("audit.actor", "Actor") }}</th>
+              <th>{{ $t("audit.target", "Target") }}</th>
               <th>IP</th>
               <th>Details</th>
             </tr>
@@ -518,27 +519,27 @@
               <td>{{ row.ip_address || "—" }}</td>
               <td>
                 <span>{{ truncateDetails(row.details) }}</span>
-                <button class="inline" v-if="hasDetails(row)" @click="openDetails(row)">View</button>
+                <button class="inline" v-if="hasDetails(row)" @click="openDetails(row)">{{ $t("ui.view", "View") }}</button>
               </td>
             </tr>
           </tbody>
         </table>
         <div class="pager" v-if="logsTotal !== null">
-          <button :disabled="logsPage === 1 || loading" @click="prevLogs">Previous</button>
-          <span>Page {{ logsPage }} of {{ logsTotalPages }}</span>
+          <button :disabled="logsPage === 1 || loading" @click="prevLogs">{{ $t("ui.previous", "Previous") }}</button>
+          <span>{{ $t("audit.page_of", { x: logsPage, y: logsTotalPages }, "Page {x} of {y}") }}</span>
           <label class="jump">
             Jump
             <input v-model.number="logsJump" type="number" min="1" :max="logsTotalPages" />
           </label>
-          <button class="inline" @click="jumpLogs" :disabled="loading">Go</button>
-          <button :disabled="logsPage >= logsTotalPages || loading" @click="nextLogs">Next</button>
+          <button class="inline" @click="jumpLogs" :disabled="loading">{{ $t("ui.go", "Go") }}</button>
+          <button :disabled="logsPage >= logsTotalPages || loading" @click="nextLogs">{{ $t("ui.next", "Next") }}</button>
         </div>
       </div>
     </div>
 
     <div v-if="detailsOpen" class="modal-backdrop" @click.self="closeDetails">
       <div class="modal details-modal">
-        <h3>Audit log details</h3>
+        <h3>{{ $t("audit.title", "Audit log details") }}</h3>
         <div class="detail-block">
           <strong>Details</strong>
           <pre>{{ formatDetails(detailsRow && detailsRow.details) }}</pre>
@@ -548,7 +549,7 @@
           <div>{{ (detailsRow && detailsRow.user_agent) || "—" }}</div>
         </div>
         <div class="modal-actions">
-          <button class="inline" @click="closeDetails">Close</button>
+          <button class="inline" @click="closeDetails">{{ $t("ui.close", "Close") }}</button>
         </div>
       </div>
     </div>
@@ -556,6 +557,9 @@
 </template>
 
 <script>
+import { applyI18nBundle } from "./i18n";
+import { apiErrorMessage } from "./api-errors";
+
 export default {
   name: "App",
   data() {
@@ -649,6 +653,7 @@ export default {
     };
   },
   mounted() {
+    this.loadI18n();
     this.loadMe();
     window.addEventListener("wa-auth-changed", this.onAuthChanged);
     window.addEventListener("wa-prefs-refresh", this.loadPrefs);
@@ -779,6 +784,7 @@ export default {
         window.__wa_current_user = this.currentUser;
         if (this.currentUser) {
           await this.loadPrefs();
+          await this.loadI18n();
           await this.loadObjectJobStatus();
           this.startObjectJobsPolling();
           if (this.currentUser.is_admin) {
@@ -799,7 +805,26 @@ export default {
         this.prefs = data;
         window.__wa_prefs = data;
         window.dispatchEvent(new CustomEvent("wa-prefs-changed", { detail: data }));
+        await this.loadI18n();
       } catch (err) {
+        // ignore
+      }
+    },
+    async loadI18n() {
+      try {
+        const lang = this.prefs && this.prefs.ui_language ? String(this.prefs.ui_language) : "";
+        const qs = new URLSearchParams();
+        if (lang) {
+          qs.set("lang", lang);
+        }
+        const suffix = qs.toString() ? `?${qs.toString()}` : "";
+        const res = await fetch(`/api/i18n${suffix}`);
+        if (!res.ok) {
+          return;
+        }
+        const data = await res.json();
+        applyI18nBundle(data);
+      } catch (_err) {
         // ignore
       }
     },
@@ -808,6 +833,7 @@ export default {
       window.__wa_current_user = this.currentUser;
       if (this.currentUser) {
         this.loadPrefs();
+        this.loadI18n();
         this.loadObjectJobStatus();
         this.startObjectJobsPolling();
         if (this.currentUser.is_admin) {
@@ -824,6 +850,7 @@ export default {
         this.objectJobCounts = { queued: 0, running: 0, done: 0, error: 0, cancelled: 0 };
         this.objectJobsLastActiveTotal = 0;
         window.__wa_prefs = null;
+        this.loadI18n();
       }
     },
     startObjectJobsPolling() {
@@ -979,13 +1006,13 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.toolsError = data.error || "Saving tool paths failed";
+          this.toolsError = apiErrorMessage(data.error, "tools.save_failed", "Saving tool paths failed");
           return;
         }
         this.applyToolStatus(data);
         this.toolForm = { exiftool: "", ffmpeg: "", ffprobe: "", soffice: "", gs: "", imagemagick: "", pecl: "" };
       } catch (err) {
-        this.toolsError = "Saving tool paths failed";
+        this.toolsError = this.$t("tools.save_failed", "Saving tool paths failed");
       } finally {
         this.loading = false;
       }
@@ -1003,7 +1030,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.toolsError = data.error || "Tool recheck failed";
+          this.toolsError = apiErrorMessage(data.error, "admin.tool_recheck_failed", "Tool recheck failed");
           if (!silent && !this.toolsOpen) {
             window.alert(this.toolsError);
           }
@@ -1011,9 +1038,9 @@ export default {
         }
         this.applyToolStatus(data);
       } catch (err) {
-        this.toolsError = "Tool recheck failed";
+        this.toolsError = this.$t("admin.tool_recheck_failed", "Tool recheck failed");
         if (!silent && !this.toolsOpen) {
-          window.alert("Tool recheck failed");
+          window.alert(this.$t("admin.tool_recheck_failed", "Tool recheck failed"));
         }
       } finally {
         this.loading = false;
@@ -1042,6 +1069,10 @@ export default {
     openObjectProposals() {
       this.adminOpen = false;
       this.$router.push("/admin/object-proposals");
+    },
+    openLocalizationAdmin() {
+      this.adminOpen = false;
+      this.$router.push("/admin/localization");
     },
     scanAssets() {
       this.adminOpen = false;
@@ -1076,7 +1107,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.scanError = data.error || "Scan failed";
+          this.scanError = apiErrorMessage(data.error, "assets.scan_failed", "Scan failed");
           return;
         }
         this.scanSummary = {
@@ -1090,7 +1121,7 @@ export default {
         this.scanStage = "status";
         await this.refreshScanItems();
       } catch (_err) {
-        this.scanError = "Scan failed";
+        this.scanError = this.$t("assets.scan_failed", "Scan failed");
       } finally {
         this.scanLoading = false;
       }
@@ -1112,13 +1143,13 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.scanError = data.error || "Failed to load scan status";
+          this.scanError = apiErrorMessage(data.error, "scan.status_load_failed", "Failed to load scan status");
           return;
         }
         this.scanItems = Array.isArray(data.items) ? data.items : [];
         this.updateScanRefresh();
       } catch (_err) {
-        this.scanError = "Failed to load scan status";
+        this.scanError = this.$t("scan.status_load_failed", "Failed to load scan status");
       } finally {
         this.scanLoading = false;
       }
@@ -1212,12 +1243,12 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.jobsError = data.error || "Failed to load job status";
+          this.jobsError = apiErrorMessage(data.error, "jobs.status_load_failed", "Failed to load job status");
           return;
         }
         this.jobsStatus = data;
       } catch (_err) {
-        this.jobsError = "Failed to load job status";
+        this.jobsError = this.$t("jobs.status_load_failed", "Failed to load job status");
       } finally {
         this.loading = false;
       }
@@ -1252,7 +1283,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          window.alert(data.error || "Clean structure failed");
+          window.alert(apiErrorMessage(data.error, "admin.clean_structure_failed", "Clean structure failed"));
           return;
         }
         const report = data.report || {};
@@ -1264,7 +1295,7 @@ export default {
         });
         window.alert(`Clean structure done\n${parts.join("\n")}`);
       } catch (err) {
-        window.alert("Clean structure failed");
+        window.alert(this.$t("admin.clean_structure_failed", "Clean structure failed"));
       } finally {
         this.loading = false;
       }
@@ -1300,7 +1331,7 @@ export default {
         const dryParsed = await parseResponse(dryRes);
         const dryData = dryParsed.data;
         if (!dryRes.ok) {
-          window.alert(dryData.error || dryParsed.raw || "Placeholder purge dry-run failed");
+          window.alert(apiErrorMessage(dryData.error || dryParsed.raw, "admin.placeholder_purge_dry_failed", "Placeholder purge dry-run failed"));
           return;
         }
 
@@ -1332,7 +1363,7 @@ export default {
         const realParsed = await parseResponse(realRes);
         const realData = realParsed.data;
         if (!realRes.ok) {
-          window.alert(realData.error || realParsed.raw || "Placeholder purge failed");
+          window.alert(apiErrorMessage(realData.error || realParsed.raw, "admin.placeholder_purge_failed", "Placeholder purge failed"));
           return;
         }
         const realReport = realData.report || {};
@@ -1340,7 +1371,7 @@ export default {
           `Placeholder purge complete\\nDeleted: ${Number(realReport.placeholder_matches || 0)}\\nBytes: ${Number(realReport.bytes || 0)}`
         );
       } catch (err) {
-        window.alert("Placeholder purge failed");
+        window.alert(this.$t("admin.placeholder_purge_failed", "Placeholder purge failed"));
       } finally {
         this.loading = false;
       }
@@ -1365,7 +1396,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          window.alert(data.error || "Clear all thumbs failed");
+          window.alert(apiErrorMessage(data.error, "admin.clear_thumbs_failed", "Clear all thumbs failed"));
           return;
         }
         const report = data.report || {};
@@ -1373,7 +1404,7 @@ export default {
           `Clear all thumbs complete\nDeleted files: ${Number(report.deleted_files || 0)}\nDeleted bytes: ${Number(report.deleted_bytes || 0)}\nDeleted dirs: ${Number(report.deleted_dirs || 0)}\nFailed deletes: ${Number(report.failed_deletes || 0)}`
         );
       } catch (_err) {
-        window.alert("Clear all thumbs failed");
+        window.alert(this.$t("admin.clear_thumbs_failed", "Clear all thumbs failed"));
       } finally {
         this.loading = false;
       }
@@ -1429,7 +1460,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.logsError = data.error || "Failed to load logs";
+          this.logsError = apiErrorMessage(data.error, "logs.load_failed", "Failed to load logs");
           return;
         }
         this.logs = data.rows || [];
@@ -1441,7 +1472,7 @@ export default {
           this.logsPageSize = data.page_size;
         }
       } catch (err) {
-        this.logsError = "Failed to load logs";
+        this.logsError = this.$t("logs.load_failed", "Failed to load logs");
       } finally {
         this.loading = false;
       }
@@ -1458,7 +1489,7 @@ export default {
           return;
         }
         if (!res.ok) {
-          let msg = "Failed to export logs";
+          let msg = this.$t("logs.export_failed", "Failed to export logs");
           try {
             const data = await res.json();
             if (data && data.error) {
@@ -1483,7 +1514,7 @@ export default {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
       } catch (err) {
-        this.logsError = "Failed to export logs";
+        this.logsError = this.$t("logs.export_failed", "Failed to export logs");
       } finally {
         this.loading = false;
       }
@@ -1637,7 +1668,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.adminError = data.error || "Failed to load users";
+          this.adminError = apiErrorMessage(data.error, "profile_picker.load_failed", "Failed to load users");
           return;
         }
         this.users = data.map((row) => ({
@@ -1648,7 +1679,7 @@ export default {
         this.usersDirty = false;
         this.dirtyUserIds = {};
       } catch (err) {
-        this.adminError = "Failed to load users";
+        this.adminError = this.$t("profile_picker.load_failed", "Failed to load users");
       } finally {
         this.loading = false;
       }
@@ -1685,14 +1716,14 @@ export default {
           }
           const data = await res.json();
           if (!res.ok) {
-            this.adminError = data.error || "Failed to save changes";
+            this.adminError = apiErrorMessage(data.error, "admin.save_changes_failed", "Failed to save changes");
             return;
           }
         }
         this.usersDirty = false;
         this.dirtyUserIds = {};
       } catch (err) {
-        this.adminError = "Failed to save changes";
+        this.adminError = this.$t("admin.save_changes_failed", "Failed to save changes");
       } finally {
         this.loading = false;
       }
@@ -1774,7 +1805,7 @@ export default {
           }
           const data = await res.json();
           if (!res.ok) {
-            this.editError = data.error || "Failed to create user";
+            this.editError = apiErrorMessage(data.error, "admin.create_user_failed", "Failed to create user");
             return;
           }
         } else {
@@ -1799,14 +1830,14 @@ export default {
           }
           const data = await res.json();
           if (!res.ok) {
-            this.editError = data.error || "Failed to update user";
+            this.editError = apiErrorMessage(data.error, "admin.update_user_failed", "Failed to update user");
             return;
           }
         }
         this.editOpen = false;
         await this.fetchUsers();
       } catch (err) {
-        this.editError = "Failed to save user";
+        this.editError = this.$t("admin.save_user_failed", "Failed to save user");
       } finally {
         this.loading = false;
       }
@@ -1837,13 +1868,13 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.adminError = data.error || "Failed to disable user";
+          this.adminError = apiErrorMessage(data.error, "admin.disable_user_failed", "Failed to disable user");
           return;
         }
         this.deleteOpen = false;
         await this.fetchUsers();
       } catch (err) {
-        this.adminError = "Failed to disable user";
+        this.adminError = this.$t("admin.disable_user_failed", "Failed to disable user");
       } finally {
         this.loading = false;
       }
@@ -1911,7 +1942,7 @@ export default {
         });
         const data = await res.json();
         if (!res.ok) {
-          this.forceError = data.error || "Password change failed";
+          this.forceError = apiErrorMessage(data.error, "profile.password_change_failed", "Password change failed");
           return;
         }
         await fetch("/api/auth/logout", { method: "POST" });
@@ -1923,7 +1954,7 @@ export default {
         window.__wa_current_user = null;
         this.$router.push("/login");
       } catch (err) {
-        this.forceError = "Password change failed";
+        this.forceError = this.$t("profile.password_change_failed", "Password change failed");
       } finally {
         this.loading = false;
       }

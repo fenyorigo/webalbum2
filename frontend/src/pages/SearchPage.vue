@@ -10,31 +10,31 @@
       </aside>
       <div class="search-main">
     <header class="hero">
-      <h1>Family memories</h1>
-      <p>Query your indexer DB (read-only).</p>
+      <h1>{{ $t("search.title", "Family memories") }}</h1>
+      <p>{{ $t("search.subtitle", "Query your indexer DB (read-only).") }}</p>
     </header>
 
     <section class="panel">
       <div v-if="loadedSearchName" class="loaded-indicator">
-        <span>Loaded: {{ loadedSearchName }}</span>
-        <span v-if="isModified" class="pill">Modified</span>
+        <span>{{ $t("search.loaded", "Loaded") }}: {{ loadedSearchName }}</span>
+        <span v-if="isModified" class="pill">{{ $t("common.modified", "Modified") }}</span>
         <button v-if="isModified" class="inline" type="button" @click="resetToLoaded">
-          Reset to loaded
+          {{ $t("ui.reset_loaded", "Reset to loaded") }}
         </button>
       </div>
       <div class="row">
         <label class="tags">
-          Tags
+          {{ $t("search.tags", "Tags") }}
           <div class="tag-rows">
             <div v-for="(tag, idx) in form.tags" :key="idx" class="tag-row">
               <select v-model="form.tags[idx].mode">
-                <option value="include">AND</option>
-                <option value="exclude">AND NOT</option>
+                <option value="include">{{ $t("search.logic.and", "AND") }}</option>
+                <option value="exclude">{{ $t("search.logic.and_not", "AND NOT") }}</option>
               </select>
               <input
                 v-model="form.tags[idx].value"
                 type="text"
-                placeholder="Tag"
+                :placeholder="$t('search.tag_placeholder', 'Tag')"
                 @focus="setActiveTag(idx)"
                 @input="onTagInput(idx)"
                 @keydown.enter.prevent="runSearch(true)"
@@ -42,7 +42,7 @@
               <button type="button" class="tag-remove" @click="clearTagRow(idx)">✕</button>
             </div>
           </div>
-          <button type="button" class="tag-add" @click="addTagRow">+ Add tag</button>
+          <button type="button" class="tag-add" @click="addTagRow">+ {{ $t("search.add_tag", "Add tag") }}</button>
           <div v-if="activeTagIndex !== null && suggestions.length" class="suggestions">
             <button
               v-for="item in suggestions"
@@ -57,72 +57,76 @@
           </div>
         </label>
         <label>
-          Tag match
+          {{ $t("search.tag_match", "Tag match") }}
           <select v-model="form.tagMode">
-            <option value="ALL">All</option>
-            <option value="ANY">Any</option>
+            <option value="ALL">{{ $t("search.tag_match.all", "All") }}</option>
+            <option value="ANY">{{ $t("search.tag_match.any", "Any") }}</option>
           </select>
         </label>
         <label>
-          Path contains
+          {{ $t("search.path_contains", "Path contains") }}
           <input v-model.trim="form.path" placeholder="/Trips/" />
+        </label>
+        <label>
+          {{ $t("search.media_ids", "Media ID(s)") }}
+          <input v-model.trim="form.mediaIds" placeholder="4490, 3579, 1107" />
         </label>
       </div>
       <div class="row">
         <label>
-          Taken
+          {{ $t("search.taken", "Taken") }}
           <select v-model="form.dateOp">
-            <option value="after">After</option>
-            <option value="before">Before</option>
-            <option value="between">Between</option>
+            <option value="after">{{ $t("search.taken.after", "After") }}</option>
+            <option value="before">{{ $t("search.taken.before", "Before") }}</option>
+            <option value="between">{{ $t("search.taken.between", "Between") }}</option>
           </select>
         </label>
         <label v-if="form.dateOp !== 'between'">
-          Date
+          {{ $t("search.date", "Date") }}
           <input v-model.trim="form.date" type="text" placeholder="YYYY-MM-DD" />
         </label>
         <label v-else>
-          Start
+          {{ $t("search.start", "Start") }}
           <input v-model.trim="form.start" type="text" placeholder="YYYY-MM-DD" />
         </label>
         <label v-if="form.dateOp === 'between'">
-          End
+          {{ $t("search.end", "End") }}
           <input v-model.trim="form.end" type="text" placeholder="YYYY-MM-DD" />
         </label>
       </div>
       <div class="row">
         <label>
-          Sort
+          {{ $t("search.sort", "Sort") }}
           <select v-model="form.sortField">
-            <option value="path">Path</option>
-            <option value="taken">Taken</option>
+            <option value="path">{{ $t("search.sort.path", "Path") }}</option>
+            <option value="taken">{{ $t("search.sort.taken", "Taken") }}</option>
           </select>
         </label>
         <label>
-          Direction
+          {{ $t("search.direction", "Direction") }}
           <select v-model="form.sortDir">
             <option value="asc">{{ sortDirLabel("asc") }}</option>
             <option value="desc">{{ sortDirLabel("desc") }}</option>
           </select>
         </label>
         <label>
-          Type
+          {{ $t("search.type", "Type") }}
           <select v-model="form.type">
-            <option value="">Any</option>
-            <option value="image">Photos</option>
-            <option value="video">Videos</option>
-            <option value="audio">Audio</option>
-            <option value="doc">Documents</option>
+            <option value="">{{ $t("search.tag_match.any", "Any") }}</option>
+            <option value="image">{{ $t("search.type.photos", "Photos") }}</option>
+            <option value="video">{{ $t("search.type.videos", "Videos") }}</option>
+            <option value="audio">{{ $t("search.type.audio", "Audio") }}</option>
+            <option value="doc">{{ $t("search.type.documents", "Documents") }}</option>
           </select>
         </label>
         <label>
-          <span>Has notes</span>
+          <span>{{ $t("search.has_notes", "Has notes") }}</span>
           <input v-model="form.hasNotes" type="checkbox" />
         </label>
         <label>
-          Extension
+          {{ $t("search.extension", "Extension") }}
           <select v-model="form.ext">
-            <option value="">Any</option>
+            <option value="">{{ $t("search.tag_match.any", "Any") }}</option>
             <option value="pdf">PDF</option>
             <option value="txt">TXT</option>
             <option value="doc">DOC</option>
@@ -137,30 +141,31 @@
           </select>
         </label>
         <label>
-          <span>Only favorites</span>
+          <span>{{ $t("search.only_favorites", "Only favorites") }}</span>
           <input v-model="form.onlyFavorites" type="checkbox" :disabled="!canFavorite" />
         </label>
         <label>
-          Limit
+          {{ $t("search.limit", "Limit") }}
           <input v-model.number="form.limit" type="number" min="1" max="1000" />
         </label>
         <label>
-          View
+          {{ $t("search.view", "View") }}
           <select v-model="viewMode">
-            <option value="list">List</option>
-            <option value="grid">Grid</option>
+            <option value="list">{{ $t("common.view_mode.list", "List") }}</option>
+            <option value="grid">{{ $t("common.view_mode.grid", "Grid") }}</option>
           </select>
         </label>
       </div>
       <div class="row actions">
-        <button @click="runSearch(true)" :disabled="loading">Search</button>
-        <span v-if="selectedFolder" class="pill folder-pill" :title="selectedFolder.rel_path">Folder: {{ selectedFolder.rel_path }}</span>
-        <button v-if="selectedFolder" class="clear" type="button" @click="clearFolderFilter">Clear folder filter</button>
-        <button @click="openSaveModal" :disabled="loading">Save search</button>
-        <button @click="clearCriteria" :disabled="loading">Clear search criteria</button>
+        <button @click="runSearch(true)" :disabled="loading">{{ $t("search.button", "Search") }}</button>
+        <span v-if="selectedFolder" class="pill folder-pill" :title="selectedFolder.rel_path">{{ $t("search.folder", "Folder") }}: {{ selectedFolder.rel_path }}</span>
+        <button v-if="selectedFolder" class="clear" type="button" @click="clearFolderFilter">{{ $t("search.folder_clear", "Clear folder filter") }}</button>
+        <button @click="openSaveModal" :disabled="loading">{{ $t("search.save_search", "Save search") }}</button>
+        <button v-if="isAdmin" @click="openTagHistoryModal" :disabled="loading">{{ $t("search.tag_changes", "Tag changes") }}</button>
+        <button @click="clearCriteria" :disabled="loading">{{ $t("search.clear_criteria", "Clear search criteria") }}</button>
         <label class="checkbox">
           <input type="checkbox" v-model="debug" />
-          Debug SQL
+          {{ $t("search.debug_sql", "Debug SQL") }}
         </label>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
@@ -168,8 +173,8 @@
 
     <section class="results">
       <div class="meta">
-        <span v-if="loading">Loading…</span>
-        <span v-else-if="total === null">Results: —</span>
+        <span v-if="loading">{{ $t("common.loading", "Loading...") }}</span>
+        <span v-else-if="total === null">{{ $t("search.results_empty", "Results: —") }}</span>
         <span v-else>{{ resultsSummary }}</span>
         <span v-if="savedBanner" class="pill">{{ savedBanner }}</span>
       </div>
@@ -179,43 +184,51 @@
           :class="{ active: viewMode === 'list' }"
           @click="viewMode = 'list'"
         >
-          List
+          {{ $t("common.view_mode.list", "List") }}
         </button>
         <button
           type="button"
           :class="{ active: viewMode === 'grid' }"
           @click="viewMode = 'grid'"
         >
-          Grid
+          {{ $t("common.view_mode.grid", "Grid") }}
         </button>
       </div>
       <div class="pager" v-if="total !== null && total > (form.limit || 50)">
-        <button :disabled="page === 1 || loading" @click="prevPage">Previous</button>
-        <span>Page {{ page }} of {{ totalPages }}</span>
+        <button :disabled="page === 1 || loading" @click="prevPage">{{ $t("ui.previous", "Previous") }}</button>
+        <span>{{ $t("audit.page_of", { x: page, y: totalPages }, "Page {x} of {y}") }}</span>
         <input
           v-model.number="pageInput"
           type="number"
           min="1"
           :max="totalPages"
-          placeholder="Go to"
+          :placeholder="$t('ui.go', 'Go')"
         />
-        <button :disabled="loading" @click="jumpToPage">Go</button>
-        <button :disabled="page >= totalPages || loading" @click="nextPage">Next</button>
+        <button :disabled="loading" @click="jumpToPage">{{ $t("ui.go", "Go") }}</button>
+        <button :disabled="page >= totalPages || loading" @click="nextPage">{{ $t("ui.next", "Next") }}</button>
         <button
           class="download"
           :disabled="loading || selectedIds.length === 0 || selectedIds.length > 20"
           @click="downloadSelected"
         >
-          Download selected ({{ selectedIds.length }})
+          {{ $t("search.download_selected", "Download selected") }} ({{ selectedIds.length }})
         </button>
-        <span class="note">Max 20 files per ZIP</span>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || selectedIds.length === 0"
+          @click="openBatchTagModal"
+        >
+          {{ $t("search.batch_tag_edit", "Batch tag edit") }} ({{ selectedIds.length }})
+        </button>
+        <span class="note">{{ $t("search.download_limit_note", "Max 20 files per ZIP") }}</span>
         <button
           v-if="selectedIds.length"
           class="clear"
           type="button"
           @click="clearSelection"
         >
-          Unselect all
+          {{ $t("search.unselect_all", "Unselect all") }}
         </button>
       </div>
       <results-list
@@ -261,7 +274,15 @@
           :disabled="loading || selectedIds.length === 0 || selectedIds.length > 20"
           @click="downloadSelected"
         >
-          Download selected ({{ selectedIds.length }})
+          {{ $t("search.download_selected", "Download selected") }} ({{ selectedIds.length }})
+        </button>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || selectedIds.length === 0"
+          @click="openBatchTagModal"
+        >
+          {{ $t("search.batch_tag_edit", "Batch tag edit") }} ({{ selectedIds.length }})
         </button>
         <span class="note">Max 20 files per ZIP</span>
         <button
@@ -270,36 +291,44 @@
           type="button"
           @click="clearSelection"
         >
-          Unselect all
+          {{ $t("search.unselect_all", "Unselect all") }}
         </button>
       </div>
       <div class="pager" v-if="total !== null && total > (form.limit || 50)">
-        <button :disabled="page === 1 || loading" @click="prevPage">Previous</button>
-        <span>Page {{ page }} of {{ totalPages }}</span>
+        <button :disabled="page === 1 || loading" @click="prevPage">{{ $t("ui.previous", "Previous") }}</button>
+        <span>{{ $t("audit.page_of", { x: page, y: totalPages }, "Page {x} of {y}") }}</span>
         <input
           v-model.number="pageInput"
           type="number"
           min="1"
           :max="totalPages"
-          placeholder="Go to"
+          :placeholder="$t('ui.go', 'Go')"
         />
-        <button :disabled="loading" @click="jumpToPage">Go</button>
-        <button :disabled="page >= totalPages || loading" @click="nextPage">Next</button>
+        <button :disabled="loading" @click="jumpToPage">{{ $t("ui.go", "Go") }}</button>
+        <button :disabled="page >= totalPages || loading" @click="nextPage">{{ $t("ui.next", "Next") }}</button>
         <button
           class="download"
           :disabled="loading || selectedIds.length === 0 || selectedIds.length > 20"
           @click="downloadSelected"
         >
-          Download selected ({{ selectedIds.length }})
+          {{ $t("search.download_selected", "Download selected") }} ({{ selectedIds.length }})
         </button>
-        <span class="note">Max 20 files per ZIP</span>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || selectedIds.length === 0"
+          @click="openBatchTagModal"
+        >
+          {{ $t("search.batch_tag_edit", "Batch tag edit") }} ({{ selectedIds.length }})
+        </button>
+        <span class="note">{{ $t("search.download_limit_note", "Max 20 files per ZIP") }}</span>
       </div>
       <pre v-if="debugInfo" class="debug">{{ debugInfo }}</pre>
     </section>
       </div>
     </div>
     <image-viewer
-      :results="results"
+      :results="viewerResults"
       :start-id="viewerStartId"
       :is-open="viewerOpen"
       :file-url="fileUrl"
@@ -318,7 +347,7 @@
       @slideshow-finished="finishSlideshow"
     />
     <video-viewer
-      :results="results"
+      :results="viewerResults"
       :start-id="videoViewerStartId"
       :is-open="videoViewerOpen"
       :video-url="videoUrl"
@@ -340,7 +369,7 @@
       <div class="modal asset-modal">
         <div class="modal-header">
           <h3>{{ assetViewerRow && fileName(assetViewerRow.path) }}</h3>
-          <button class="inline" type="button" @click="closeAssetViewer">Close</button>
+          <button class="inline" type="button" @click="closeAssetViewer">{{ $t("ui.close", "Close") }}</button>
         </div>
         <p class="muted" :title="assetViewerRow && assetViewerRow.path">{{ assetViewerRow && assetViewerRow.path }}</p>
         <div v-if="assetViewerRow && assetViewerRow.type === 'audio'" class="asset-body">
@@ -352,45 +381,263 @@
           ></audio>
         </div>
         <div v-else class="asset-body doc-body">
-          <iframe :src="assetViewUrl(assetViewerRow)" title="Document preview"></iframe>
+          <iframe :src="assetViewUrl(assetViewerRow)" :title="$t('common.preview', 'Preview')"></iframe>
         </div>
         <div class="modal-actions">
           <label class="slideshow-control">
-            <span>Sec</span>
+            <span>{{ $t("search.asset_seconds", "Sec") }}</span>
             <input v-model.number="slideshowSeconds" type="number" min="1" max="3600" />
           </label>
           <button class="inline" type="button" @click="toggleSlideshow">
-            {{ slideshowActive ? "End slideshow" : "Start slideshow" }}
+            {{ slideshowActive ? $t("viewer.end_slideshow", "End slideshow") : $t("viewer.start_slideshow", "Start slideshow") }}
           </button>
-          <button class="inline" type="button" @click="assetPrev" :disabled="assetViewerIndex <= 0">Previous</button>
-          <button class="inline" type="button" @click="assetNext" :disabled="assetViewerIndex < 0 || assetViewerIndex >= results.length - 1">Next</button>
-          <button class="inline" type="button" @click="openAssetOriginal">Download original</button>
-          <button class="inline" type="button" @click="openObjectPage(assetViewerRow)">Object notes</button>
+          <button class="inline" type="button" @click="assetPrev" :disabled="assetViewerIndex <= 0">{{ $t("ui.previous", "Previous") }}</button>
+          <button class="inline" type="button" @click="assetNext" :disabled="assetViewerIndex < 0 || assetViewerIndex >= results.length - 1">{{ $t("ui.next", "Next") }}</button>
+          <button class="inline" type="button" @click="openAssetOriginal">{{ $t("common.download_original", "Download original") }}</button>
+          <button class="inline" type="button" @click="openObjectPage(assetViewerRow)">{{ $t("search.object_notes", "Object notes") }}</button>
         </div>
         <p v-if="assetViewerError" class="error">{{ assetViewerError }}</p>
       </div>
     </div>
     <div v-if="saveOpen" class="modal-backdrop" @click.self="closeSaveModal">
       <div class="modal">
-        <h3>Save search</h3>
+        <h3>{{ $t("search.save_modal_title", "Save search") }}</h3>
         <label>
-          Name
+          {{ $t("common.name", "Name") }}
           <input v-model.trim="saveName" type="text" />
         </label>
         <div class="modal-actions">
-          <button class="inline" @click="submitSave(false)" :disabled="loading">Save</button>
-          <button class="inline" @click="closeSaveModal" :disabled="loading">Cancel</button>
+          <button class="inline" @click="submitSave(false)" :disabled="loading">{{ $t("ui.save", "Save") }}</button>
+          <button class="inline" @click="closeSaveModal" :disabled="loading">{{ $t("ui.cancel", "Cancel") }}</button>
         </div>
         <p v-if="saveError" class="error">{{ saveError }}</p>
       </div>
     </div>
+    <div v-if="batchTagOpen && !batchTagPreviewHidden" class="modal-backdrop" @click.self="closeBatchTagModal">
+      <div class="modal batch-tag-modal">
+        <div class="modal-header">
+          <h3>{{ $t("search.batch_tag_edit_title", "Batch tag edit") }}</h3>
+          <button class="inline" type="button" @click="closeBatchTagModal">{{ $t("ui.close", "Close") }}</button>
+        </div>
+        <p class="muted">
+          {{ $t("search.batch_selected_count", { count: selectedIds.length }, "Selected: {count}.") }}
+          {{ $t("search.batch_eligible_count", { count: batchTagEligibleCount }, "Eligible media: {count}.") }}
+        </p>
+        <div class="batch-tag-layout">
+          <section class="batch-tag-controls">
+            <label>
+              {{ $t("viewer.add_tag_label", "Add tag") }}
+              <input
+                v-model.trim="batchTagAddInput"
+                type="text"
+                :placeholder="$t('search.batch_add_tag_placeholder', 'Optional tag to add')"
+                @input="onBatchTagInput"
+              />
+            </label>
+            <div v-if="batchTagSuggestions.length" class="suggestions batch-tag-suggestions">
+              <button
+                v-for="item in batchTagSuggestions"
+                :key="item.tag"
+                type="button"
+                class="suggestion"
+                @click="applyBatchTagSuggestion(item.tag)"
+              >
+                <span class="name">{{ item.tag }}</span>
+                <span class="count">{{ item.cnt }}</span>
+              </button>
+            </div>
+            <div v-if="batchTagCommonTags.length" class="batch-tag-common">
+              <span class="batch-tag-label">{{ $t("search.batch_common_tags", "Common tags") }}</span>
+              <div class="tag-chip-list">
+                <span v-for="tag in batchTagCommonTags" :key="`common:${tag}`" class="tag-pill">
+                  {{ tag }}
+                </span>
+              </div>
+            </div>
+            <div class="batch-tag-remove">
+              <span class="batch-tag-label">{{ $t("search.batch_remove_tags", "Tags to remove") }}</span>
+              <p v-if="!batchTagAvailableRemoveTags.length" class="muted">{{ $t("search.batch_no_removable_tags", "No removable tags found on the selection.") }}</p>
+              <label
+                v-for="item in batchTagAvailableRemoveTags"
+                :key="`remove:${item.tag}`"
+                class="batch-tag-check"
+              >
+                <input
+                  type="checkbox"
+                  :value="item.tag"
+                  :checked="batchTagRemoveTags.includes(item.tag)"
+                  @change="toggleBatchRemoveTag(item.tag, $event.target.checked)"
+                />
+                <span>{{ item.tag }}</span>
+                <span class="muted">({{ item.count }})</span>
+              </label>
+            </div>
+            <p v-if="batchTagConflict" class="error">{{ $t("search.batch_tag_conflict", "The same tag cannot be removed and added.") }}</p>
+            <p v-if="batchTagError" class="error">{{ batchTagError }}</p>
+            <p v-if="batchTagSummary" class="muted">
+              {{ $t("search.batch_summary", { queued: batchTagSummary.queued_count, skipped: batchTagSummary.skipped_count, failed: batchTagSummary.failure_count }, "Queued {queued}, skipped {skipped}, failed {failed}.") }}
+            </p>
+            <div class="modal-actions">
+              <button
+                class="inline"
+                type="button"
+                :disabled="batchTagSubmitting || !batchTagHasChangeRequest || batchTagConflict"
+                @click="submitBatchTagEdit"
+              >
+                {{ $t("search.batch_queue_edit", "Queue batch edit") }}
+              </button>
+              <button class="inline" type="button" :disabled="batchTagSubmitting" @click="closeBatchTagModal">
+                {{ $t("ui.cancel", "Cancel") }}
+              </button>
+            </div>
+          </section>
+          <section class="batch-tag-items">
+            <div v-if="batchTagLoading" class="muted">{{ $t("search.batch_loading_items", "Loading selected items...") }}</div>
+            <div v-else-if="!batchTagItems.length" class="muted">{{ $t("search.batch_no_items", "No selected items.") }}</div>
+            <article
+              v-for="item in batchTagItems"
+              :key="`batch-item:${item.id}`"
+              class="batch-tag-item"
+            >
+              <div class="batch-tag-thumb">
+                <img
+                  v-if="item.status === 'ok'"
+                  :src="thumbUrl(item)"
+                  :alt="fileName(item.rel_path)"
+                  loading="lazy"
+                  class="thumb-img loaded"
+                />
+                <span v-else class="thumb-placeholder">{{ item.status === "unsupported" ? "?" : "!" }}</span>
+              </div>
+              <div class="batch-tag-meta">
+                <div class="batch-tag-path" :title="item.rel_path || ''">
+                  {{ item.rel_path || `ID ${item.id}` }}
+                </div>
+                <div class="batch-tag-status" :class="`status-${item.status}`">
+                  {{ item.status }}
+                  <span v-if="item.type">({{ item.type }})</span>
+                  <span v-if="item.error"> - {{ item.error }}</span>
+                </div>
+                <div v-if="item.tags && item.tags.length" class="tag-chip-list">
+                  <span v-for="tag in item.tags" :key="`${item.id}:${tag}`" class="tag-pill">
+                    {{ tag }}
+                  </span>
+                </div>
+                <div v-else class="muted">{{ $t("search.batch_no_current_tags", "No current tags") }}</div>
+              </div>
+              <div class="batch-tag-actions">
+                <button
+                  class="inline"
+                  type="button"
+                  :disabled="item.status !== 'ok'"
+                  @click="previewBatchItem(item)"
+                >
+                  {{ $t("ui.preview", "Preview") }}
+                </button>
+                <button
+                  class="inline"
+                  type="button"
+                  :disabled="item.status !== 'ok'"
+                  @click="openObjectPage(item)"
+                >
+                  {{ $t("common.object", "Object") }}
+                </button>
+              </div>
+            </article>
+          </section>
+        </div>
+      </div>
+    </div>
     <div v-if="replaceOpen" class="modal-backdrop" @click.self="closeReplaceModal">
       <div class="modal">
-        <h3>Replace saved search?</h3>
-        <p>A saved search with this name already exists. Replace it?</p>
+        <h3>{{ $t("search.replace_saved_title", "Replace saved search?") }}</h3>
+        <p>{{ $t("search.replace_saved_body", "A saved search with this name already exists. Replace it?") }}</p>
         <div class="modal-actions">
-          <button class="inline" @click="submitSave(true)" :disabled="loading">Replace</button>
-          <button class="inline" @click="closeReplaceModal" :disabled="loading">Cancel</button>
+          <button class="inline" @click="submitSave(true)" :disabled="loading">{{ $t("common.replace", "Replace") }}</button>
+          <button class="inline" @click="closeReplaceModal" :disabled="loading">{{ $t("ui.cancel", "Cancel") }}</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="historyOpen && !historyPreviewHidden" class="modal-backdrop" @click.self="closeTagHistoryModal">
+      <div class="modal batch-tag-modal">
+        <div class="modal-header">
+          <h3>{{ $t("history.title", "Tag changes") }}</h3>
+          <button class="inline" type="button" @click="closeTagHistoryModal">{{ $t("ui.close", "Close") }}</button>
+        </div>
+        <div class="row">
+          <label>
+            {{ $t("history.media_ids", "Media ID(s)") }}
+            <input v-model.trim="historyIds" type="text" :placeholder="$t('search.history_filter_placeholder', 'Optional filter: 4490, 3579')" />
+          </label>
+          <label>
+            {{ $t("history.limit", "Limit") }}
+            <input v-model.number="historyLimit" type="number" min="1" max="500" />
+          </label>
+          <div class="modal-actions">
+            <button class="inline" type="button" :disabled="historyLoading" @click="fetchTagHistory(true)">{{ $t("history.load", "Load") }}</button>
+          </div>
+        </div>
+        <p v-if="historyError" class="error">{{ historyError }}</p>
+        <p v-else class="muted">{{ $t("history.showing_count", { shown: historyItems.length, total: historyTotal }, "Showing {shown} of {total} tag edits.") }}</p>
+        <div class="batch-tag-items">
+          <article v-for="item in historyItems" :key="`history:${item.id}`" class="batch-tag-item">
+            <div class="batch-tag-thumb">
+              <img
+                v-if="item.current_file_id && item.current_type"
+                :src="thumbUrl({ id: item.current_file_id, type: item.current_type })"
+                :alt="fileName(item.rel_path)"
+                loading="lazy"
+                class="thumb-img loaded"
+              />
+              <span v-else class="thumb-placeholder">?</span>
+            </div>
+            <div class="batch-tag-meta">
+              <div class="batch-tag-path" :title="item.rel_path">{{ item.rel_path }}</div>
+              <div class="batch-tag-status">
+                Edit #{{ item.id }}
+                <span v-if="item.batch_id"> | Batch {{ item.batch_id }}</span>
+                <span v-if="item.current_file_id"> | File {{ item.current_file_id }}</span>
+                <span> | {{ item.status }}</span>
+              </div>
+              <div class="muted">
+                {{ item.action_type }} by {{ item.created_by_username || item.created_by_user_id || "?" }}
+                {{ $t("history.at", "at") }} {{ formatDateTime(item.created_at) }}
+              </div>
+              <div class="tag-change-row">
+                <span class="batch-tag-label">{{ $t("search.history.old", "Old") }}</span>
+                <div class="tag-chip-list">
+                  <span v-for="tag in item.old_tags" :key="`old:${item.id}:${tag}`" class="tag-pill">{{ tag }}</span>
+                  <span v-if="!item.old_tags.length" class="muted">{{ $t("common.none", "none") }}</span>
+                </div>
+              </div>
+              <div class="tag-change-row">
+                <span class="batch-tag-label">{{ $t("search.history.new", "New") }}</span>
+                <div class="tag-chip-list">
+                  <span v-for="tag in item.new_tags" :key="`new:${item.id}:${tag}`" class="tag-pill">{{ tag }}</span>
+                  <span v-if="!item.new_tags.length" class="muted">{{ $t("common.none", "none") }}</span>
+                </div>
+              </div>
+              <p v-if="item.last_error" class="error">{{ item.last_error }}</p>
+            </div>
+            <div class="batch-tag-actions">
+              <button
+                class="inline"
+                type="button"
+                :disabled="!item.current_file_id"
+                @click="previewHistoryItem(item)"
+              >
+                {{ $t("history.preview", "Preview") }}
+              </button>
+              <button
+                class="inline"
+                type="button"
+                :disabled="!item.current_file_id || historyRestoreBusy[item.id]"
+                @click="restoreHistoryItem(item)"
+              >
+                {{ $t("history.restore", "Restore original") }}
+              </button>
+            </div>
+          </article>
         </div>
       </div>
     </div>
@@ -404,6 +651,7 @@ import ResultsList from "../components/ResultsList.vue";
 import ImageViewer from "../components/ImageViewer.vue";
 import VideoViewer from "../components/VideoViewer.vue";
 import FolderTree from "../components/FolderTree.vue";
+import { apiErrorMessage } from "../api-errors";
 
 export default {
   name: "SearchPage",
@@ -422,6 +670,7 @@ export default {
         tags: [{ value: "", mode: "include" }],
         tagMode: "ALL",
         path: "",
+        mediaIds: "",
         dateOp: "after",
         date: "",
         start: "",
@@ -464,16 +713,32 @@ export default {
       mediaCacheBust: {},
       slideshowActive: false,
       slideshowSeconds: 5,
-      slideshowTimer: null
+      slideshowTimer: null,
+      batchTagOpen: false,
+      batchTagLoading: false,
+      batchTagSubmitting: false,
+      batchTagError: "",
+      batchTagItems: [],
+      batchTagAvailableRemoveTags: [],
+      batchTagCommonTags: [],
+      batchTagRemoveTags: [],
+      batchTagAddInput: "",
+      batchTagSuggestions: [],
+      batchTagSuggestTimer: null,
+      batchTagSummary: null,
+      batchTagPreviewHidden: false,
+      historyOpen: false,
+      historyLoading: false,
+      historyError: "",
+      historyItems: [],
+      historyIds: "",
+      historyLimit: 100,
+      historyOffset: 0,
+      historyTotal: 0,
+      historyRestoreBusy: {},
+      historyPreviewHidden: false,
+      detachedPreviewRows: []
     };
-  },
-  computed: {
-    assetViewerIndex() {
-      if (!this.assetViewerRow) {
-        return -1;
-      }
-      return this.results.findIndex((r) => r.id === this.assetViewerRow.id);
-    }
   },
   mounted() {
     const prefs = window.__wa_prefs || null;
@@ -636,17 +901,17 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.showToast(data.error || "Failed to load saved search");
+          this.showToast(apiErrorMessage(data.error, "search.saved_load_failed", "Failed to load saved search"));
           return;
         }
         const query = data.query_json || data.query;
         if (!query || typeof query !== "object") {
-          this.showToast("Saved search is invalid");
+          this.showToast(this.$t("search.saved_invalid", "Saved search is invalid"));
           return;
         }
         this.applyQuery(query, data.name || "", { autoRun, id: data.id });
       } catch (err) {
-        this.showToast("Failed to load saved search");
+        this.showToast(this.$t("search.saved_load_failed", "Failed to load saved search"));
       }
     },
     applyQuery(query, name, options = {}) {
@@ -664,7 +929,7 @@ export default {
       this.loadedQuery = JSON.parse(JSON.stringify(query));
       this.loadedSnapshot = this.snapshotFromQuery(this.loadedQuery);
       this.persistFolderFilter();
-      this.savedBanner = name ? `Loaded from saved search: ${name}` : "";
+      this.savedBanner = name ? `${this.$t("search.loaded_from_saved", "Loaded from saved search")}: ${name}` : "";
       if (options.autoRun) {
         this.$nextTick(() => {
           this.runSearch();
@@ -707,6 +972,7 @@ export default {
         )
         .map((item) => item.value);
       const pathItem = items.find((item) => item && item.field === "path");
+      const idItem = items.find((item) => item && item.field === "id" && item.op === "is");
       const typeItem = items.find((item) => item && item.field === "type" && item.op === "is");
       const extItem = items.find((item) => item && item.field === "ext" && item.op === "is");
       const takenItem = items.find((item) => item && item.field === "taken");
@@ -718,6 +984,9 @@ export default {
         tags: [],
         tagMode: includeGroup && includeGroup.group === "ANY" ? "ANY" : "ALL",
         path: pathItem && typeof pathItem.value === "string" ? pathItem.value : "",
+        mediaIds: idItem
+          ? (Array.isArray(idItem.value) ? idItem.value.join(", ") : String(idItem.value || ""))
+          : "",
         dateOp: "after",
         date: "",
         start: "",
@@ -782,6 +1051,12 @@ export default {
       }
       if (this.form.path) {
         items.push({ field: "path", op: "contains", value: this.form.path });
+      }
+      const mediaIds = this.parseMediaIds(this.form.mediaIds);
+      if (mediaIds.length === 1) {
+        items.push({ field: "id", op: "is", value: mediaIds[0] });
+      } else if (mediaIds.length > 1) {
+        items.push({ field: "id", op: "is", value: mediaIds });
       }
       if (this.form.dateOp === "between") {
         if (this.form.start && this.form.end) {
@@ -853,7 +1128,7 @@ export default {
           this.form.start = start;
           this.form.end = end;
           if (!dateRe.test(start) || !dateRe.test(end)) {
-            this.error = "Date must be YYYY-MM-DD";
+            this.error = this.$t("search.date_invalid", "Date must be YYYY-MM-DD");
             return null;
           }
           where.items = where.items.filter((item) => item.field !== "taken");
@@ -863,7 +1138,7 @@ export default {
         const date = normalizeDate(this.form.date);
         this.form.date = date;
         if (!dateRe.test(date)) {
-          this.error = "Date must be YYYY-MM-DD";
+          this.error = this.$t("search.date_invalid", "Date must be YYYY-MM-DD");
           return null;
         }
         where.items = where.items.filter((item) => item.field !== "taken");
@@ -879,7 +1154,7 @@ export default {
     },
     openSaveModal() {
       if (!this.currentUser) {
-        this.showToast("Login required to save searches");
+        this.showToast(this.$t("search.save_login_required", "Login required to save searches"));
         return;
       }
       const suggested = this.suggestedName();
@@ -924,6 +1199,9 @@ export default {
       if (this.form.path) {
         parts.push(`path ${this.form.path}`);
       }
+      if (this.form.mediaIds) {
+        parts.push(`ids ${this.form.mediaIds}`);
+      }
       if (this.selectedFolder && this.selectedFolder.rel_path) {
         parts.push(`in ${this.selectedFolder.rel_path}`);
       }
@@ -942,7 +1220,7 @@ export default {
       }
       const name = this.saveName.trim();
       if (!name) {
-        this.saveError = "Name is required";
+        this.saveError = this.$t("saved_search.name_required", "Name is required");
         return;
       }
       this.loading = true;
@@ -963,12 +1241,12 @@ export default {
           return;
         }
         if (!res.ok) {
-          this.saveError = data.message || data.error || "Failed to save search";
+          this.saveError = apiErrorMessage(data.message || data.error, "search.save_failed", "Failed to save search");
           return;
         }
         this.saveOpen = false;
         this.replaceOpen = false;
-        this.showToast("Saved");
+        this.showToast(this.$t("search.saved_ok", "Saved"));
       } catch (err) {
         this.saveError = "Failed to save search";
       } finally {
@@ -1080,6 +1358,297 @@ export default {
       this.form.tags[this.activeTagIndex].value = tag;
       this.suggestions = [];
     },
+    parseMediaIds(raw) {
+      if (typeof raw !== "string") {
+        return [];
+      }
+      const out = [];
+      for (const part of raw.split(/[\s,;]+/)) {
+        if (!part) {
+          continue;
+        }
+        const id = Number(part);
+        if (Number.isInteger(id) && id > 0 && !out.includes(id)) {
+          out.push(id);
+        }
+      }
+      return out;
+    },
+    openTagHistoryModal() {
+      this.historyOpen = true;
+      this.historyPreviewHidden = false;
+      if (!this.historyIds) {
+        if (this.selectedIds.length) {
+          this.historyIds = this.selectedIds.join(", ");
+        } else if (this.form.mediaIds) {
+          this.historyIds = this.form.mediaIds;
+        }
+      }
+      this.fetchTagHistory(true);
+    },
+    closeTagHistoryModal() {
+      this.historyOpen = false;
+      this.historyLoading = false;
+      this.historyError = "";
+      this.historyItems = [];
+      this.historyOffset = 0;
+      this.historyTotal = 0;
+      this.historyRestoreBusy = {};
+      this.historyPreviewHidden = false;
+    },
+    async fetchTagHistory(resetOffset = false) {
+      if (!this.historyOpen) {
+        return;
+      }
+      if (resetOffset) {
+        this.historyOffset = 0;
+      }
+      this.historyLoading = true;
+      this.historyError = "";
+      try {
+        const params = new URLSearchParams();
+        params.set("limit", String(Math.min(500, Math.max(1, Number(this.historyLimit || 100)))));
+        params.set("offset", String(this.historyOffset || 0));
+        if (this.historyIds.trim()) {
+          params.set("ids", this.historyIds.trim());
+        }
+        const res = await fetch(`/api/admin/media/tag-edits?${params.toString()}`);
+        if (this.handleAuthError(res)) {
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.historyError = apiErrorMessage(data.error, "history.load_failed", "Failed to load tag changes");
+          return;
+        }
+        this.historyItems = Array.isArray(data.items) ? data.items : [];
+        this.historyTotal = Number(data.total || 0);
+      } catch (_e) {
+        this.historyError = this.$t("history.load_failed", "Failed to load tag changes");
+      } finally {
+        this.historyLoading = false;
+      }
+    },
+    previewHistoryItem(item) {
+      if (!item || !item.current_file_id) {
+        return;
+      }
+      if (!item.current_type || !["image", "video"].includes(item.current_type)) {
+        this.showToast(this.$t("search.preview_unsupported", "Preview not supported for this file type"));
+        return;
+      }
+      this.historyPreviewHidden = true;
+      this.detachedPreviewRows = [{
+        id: item.current_file_id,
+        type: item.current_type,
+        path: item.rel_path,
+        entity: "media",
+        is_favorite: false
+      }];
+      if (item.current_type === "video") {
+        this.videoViewerStartId = item.current_file_id;
+        this.videoViewerOpen = true;
+        this.viewerOpen = false;
+      } else {
+        this.viewerStartId = item.current_file_id;
+        this.viewerOpen = true;
+        this.videoViewerOpen = false;
+      }
+    },
+    async restoreHistoryItem(item) {
+      if (!item || !item.current_file_id) {
+        return;
+      }
+      this.historyRestoreBusy = { ...this.historyRestoreBusy, [item.id]: true };
+      try {
+        const res = await fetch(`/api/admin/media/${item.current_file_id}/tags/restore`, {
+          method: "POST"
+        });
+        if (this.handleAuthError(res)) {
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.showToast(apiErrorMessage(data.error, "search.restore_queue_failed", "Failed to queue restore"));
+          return;
+        }
+        this.showToast(this.$t("search.restore_queued_for_file", { id: item.current_file_id }, "Restore queued for file {id}"));
+        this.fetchTagHistory(false);
+      } catch (_e) {
+        this.showToast(this.$t("search.restore_queue_failed", "Failed to queue restore"));
+      } finally {
+        const next = { ...this.historyRestoreBusy };
+        delete next[item.id];
+        this.historyRestoreBusy = next;
+      }
+    },
+    async openBatchTagModal() {
+      if (!this.isAdmin) {
+        return;
+      }
+      if (this.selectedIds.length === 0) {
+        this.showToast(this.$t("search.batch_select_first", "Select media objects first"));
+        return;
+      }
+      this.batchTagOpen = true;
+      this.batchTagLoading = true;
+      this.batchTagSubmitting = false;
+      this.batchTagError = "";
+      this.batchTagItems = [];
+      this.batchTagAvailableRemoveTags = [];
+      this.batchTagCommonTags = [];
+      this.batchTagRemoveTags = [];
+      this.batchTagAddInput = "";
+      this.batchTagSuggestions = [];
+      this.batchTagSummary = null;
+      this.batchTagPreviewHidden = false;
+      try {
+        const res = await fetch("/api/admin/media/tags/batch/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: this.selectedIds })
+        });
+        if (this.handleAuthError(res)) {
+          this.batchTagOpen = false;
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.batchTagError = apiErrorMessage(data.error, "search.batch_preview_failed", "Failed to load batch preview");
+          return;
+        }
+        this.batchTagItems = Array.isArray(data.items) ? data.items : [];
+        this.batchTagAvailableRemoveTags = Array.isArray(data.available_remove_tags) ? data.available_remove_tags : [];
+        this.batchTagCommonTags = Array.isArray(data.common_tags) ? data.common_tags : [];
+      } catch (_e) {
+        this.batchTagError = this.$t("search.batch_preview_failed", "Failed to load batch preview");
+      } finally {
+        this.batchTagLoading = false;
+      }
+    },
+    closeBatchTagModal() {
+      this.batchTagOpen = false;
+      this.batchTagLoading = false;
+      this.batchTagSubmitting = false;
+      this.batchTagError = "";
+      this.batchTagItems = [];
+      this.batchTagAvailableRemoveTags = [];
+      this.batchTagCommonTags = [];
+      this.batchTagRemoveTags = [];
+      this.batchTagAddInput = "";
+      this.batchTagSuggestions = [];
+      this.batchTagSummary = null;
+      this.batchTagPreviewHidden = false;
+      if (this.batchTagSuggestTimer) {
+        clearTimeout(this.batchTagSuggestTimer);
+        this.batchTagSuggestTimer = null;
+      }
+    },
+    toggleBatchRemoveTag(tag, checked) {
+      if (checked) {
+        if (!this.batchTagRemoveTags.includes(tag)) {
+          this.batchTagRemoveTags = [...this.batchTagRemoveTags, tag].sort((a, b) => a.localeCompare(b));
+        }
+        return;
+      }
+      this.batchTagRemoveTags = this.batchTagRemoveTags.filter((item) => item !== tag);
+    },
+    normalizeBatchTag(raw) {
+      if (typeof raw !== "string") {
+        return "";
+      }
+      return raw.trim().replace(/\s+/g, " ");
+    },
+    onBatchTagInput() {
+      this.batchTagError = "";
+      this.batchTagSummary = null;
+      if (this.batchTagSuggestTimer) {
+        clearTimeout(this.batchTagSuggestTimer);
+      }
+      const q = this.normalizeBatchTag(this.batchTagAddInput);
+      if (q.length < 2) {
+        this.batchTagSuggestions = [];
+        return;
+      }
+      this.batchTagSuggestTimer = setTimeout(() => {
+        this.fetchBatchTagSuggestions(q);
+      }, 150);
+    },
+    async fetchBatchTagSuggestions(q) {
+      try {
+        const params = new URLSearchParams({ q, limit: "12" });
+        const res = await fetch(`/api/tags?${params.toString()}`);
+        if (!res.ok) {
+          this.batchTagSuggestions = [];
+          return;
+        }
+        const data = await res.json();
+        if (!Array.isArray(data)) {
+          this.batchTagSuggestions = [];
+          return;
+        }
+        const currentAdd = this.normalizeBatchTag(this.batchTagAddInput);
+        this.batchTagSuggestions = data
+          .filter((item) => item && typeof item.tag === "string")
+          .map((item) => ({ tag: item.tag, cnt: Number(item.cnt || 0) }))
+          .filter((item) => item.tag !== currentAdd);
+      } catch (_e) {
+        this.batchTagSuggestions = [];
+      }
+    },
+    applyBatchTagSuggestion(tag) {
+      this.batchTagAddInput = tag;
+      this.batchTagSuggestions = [];
+    },
+    previewBatchItem(item) {
+      if (!item || item.status !== "ok") {
+        return;
+      }
+      this.batchTagPreviewHidden = true;
+      this.openViewer(item.id);
+    },
+    async submitBatchTagEdit() {
+      if (this.batchTagSubmitting || !this.batchTagHasChangeRequest || this.batchTagConflict) {
+        return;
+      }
+      this.batchTagSubmitting = true;
+      this.batchTagError = "";
+      this.batchTagSummary = null;
+      try {
+        const res = await fetch("/api/admin/media/tags/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ids: this.selectedIds,
+            remove_tags: this.batchTagRemoveTags,
+            add_tag: this.normalizeBatchTag(this.batchTagAddInput) || null
+          })
+        });
+        if (this.handleAuthError(res)) {
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok && res.status !== 207) {
+          this.batchTagError = apiErrorMessage(data.error, "search.batch_submit_failed", "Failed to queue batch tag edit");
+          return;
+        }
+        this.batchTagSummary = data;
+        const failures = Array.isArray(data.results)
+          ? data.results.filter((item) => item && item.status === "error")
+          : [];
+        if (failures.length > 0) {
+          this.batchTagError = failures.map((item) => `#${item.id}: ${item.error || "Failed"}`).join(" | ");
+          return;
+        }
+        this.showToast(this.$t("search.batch_queued_summary", { queued: data.queued_count || 0, skipped: data.skipped_count || 0 }, "Batch queued: {queued}, skipped: {skipped}"));
+        this.clearSelection();
+        this.closeBatchTagModal();
+      } catch (_e) {
+        this.batchTagError = this.$t("search.batch_submit_failed", "Failed to queue batch tag edit");
+      } finally {
+        this.batchTagSubmitting = false;
+      }
+    },
     async runSearch(resetPage = false) {
       if (resetPage) {
         this.page = 1;
@@ -1103,7 +1672,7 @@ export default {
         }
         const data = await res.json();
         if (!res.ok) {
-          this.error = data.error || "Search failed";
+          this.error = apiErrorMessage(data.error, "search.failed", "Search failed");
           this.results = [];
           return;
         }
@@ -1160,6 +1729,17 @@ export default {
     formatTs(ts) {
       const d = new Date(ts * 1000);
       return d.toISOString().slice(0, 10);
+    },
+    formatDateTime(value) {
+      if (!value) {
+        return "";
+      }
+      const normalized = String(value).replace(" ", "T");
+      const date = new Date(normalized);
+      if (Number.isNaN(date.getTime())) {
+        return String(value);
+      }
+      return date.toLocaleString();
     },
     fileUrl(id) {
       const base = `${window.location.origin}/api/file?id=${id}`;
@@ -1230,18 +1810,18 @@ export default {
           document.execCommand("copy");
           document.body.removeChild(input);
         }
-        this.showToast("Copied!");
+        this.showToast(this.$t("search.copy_ok", "Copied!"));
       } catch (err) {
-        this.showToast("Copy failed");
+        this.showToast(this.$t("search.copy_failed", "Copy failed"));
       }
     },
     async downloadSelected() {
       if (this.selectedIds.length === 0) {
-        this.showToast("Please select files first (max 20)");
+        this.showToast(this.$t("search.select_files_first", "Please select files first (max 20)"));
         return;
       }
       if (this.selectedIds.length > 20) {
-        this.showToast("More than 20 files selected, please unselect some");
+        this.showToast(this.$t("search.too_many_files", "More than 20 files selected, please unselect some"));
         return;
       }
       try {
@@ -1255,7 +1835,7 @@ export default {
         }
         if (!res.ok) {
           const data = await res.json();
-          this.showToast(data.error || "Download failed");
+          this.showToast(apiErrorMessage(data.error, "search.download_failed", "Download failed"));
           return;
         }
         const blob = await res.blob();
@@ -1270,14 +1850,14 @@ export default {
         link.remove();
         window.URL.revokeObjectURL(url);
       } catch (err) {
-        this.showToast("Download failed");
+        this.showToast(this.$t("search.download_failed", "Download failed"));
       }
     },
     async requestTrash(row) {
       if (!this.isAdmin || !row || !row.id) {
         return;
       }
-      const ok = window.confirm(`Move to Trash?
+      const ok = window.confirm(`${this.$t("viewer.move_to_trash", "Move to Trash")}?
 ${row.path || row.rel_path || row.id}
 This is reversible from Admin -> Trash.`);
       if (!ok) {
@@ -1294,13 +1874,13 @@ This is reversible from Admin -> Trash.`);
         }
         const data = await res.json();
         if (!res.ok) {
-          this.showToast(data.error || "Failed to move to trash");
+          this.showToast(apiErrorMessage(data.error, "search.trash_failed", "Failed to move to trash"));
           return;
         }
-        this.showToast("Moved to Trash");
+        this.showToast(this.$t("search.trash_moved", "Moved to Trash"));
         await this.runSearch();
       } catch (_e) {
-        this.showToast("Failed to move to trash");
+        this.showToast(this.$t("search.trash_failed", "Failed to move to trash"));
       }
     },
     showToast(message) {
@@ -1319,7 +1899,7 @@ This is reversible from Admin -> Trash.`);
     },
     async toggleFavorite(fileId) {
       if (!this.canFavorite) {
-        this.showToast("Login required to use favorites");
+        this.showToast(this.$t("search.favorites_login_required", "Login required to use favorites"));
         return;
       }
       const row = this.results.find((r) => r.id === fileId);
@@ -1341,13 +1921,13 @@ This is reversible from Admin -> Trash.`);
         const data = await res.json();
         if (!res.ok) {
           row.is_favorite = prev;
-          this.showToast(data.error || "Failed to toggle favorite");
+          this.showToast(apiErrorMessage(data.error, "search.favorite_toggle_failed", "Failed to toggle favorite"));
           return;
         }
         row.is_favorite = !!data.is_favorite;
       } catch (err) {
         row.is_favorite = prev;
-        this.showToast("Failed to toggle favorite");
+        this.showToast(this.$t("search.favorite_toggle_failed", "Failed to toggle favorite"));
       }
     },
     clearSelection() {
@@ -1361,6 +1941,7 @@ This is reversible from Admin -> Trash.`);
         tags: [{ value: "", mode: "include" }],
         tagMode: "ALL",
         path: "",
+        mediaIds: "",
         dateOp: "after",
         date: "",
         start: "",
@@ -1424,6 +2005,13 @@ This is reversible from Admin -> Trash.`);
     closeViewer() {
       this.viewerOpen = false;
       this.clearSlideshowTimer();
+      this.detachedPreviewRows = [];
+      if (this.batchTagOpen && this.batchTagPreviewHidden) {
+        this.batchTagPreviewHidden = false;
+      }
+      if (this.historyOpen && this.historyPreviewHidden) {
+        this.historyPreviewHidden = false;
+      }
       if (this.slideshowActive) {
         this.stopSlideshow();
       }
@@ -1512,6 +2100,13 @@ This is reversible from Admin -> Trash.`);
     closeVideoViewer() {
       this.videoViewerOpen = false;
       this.clearSlideshowTimer();
+      this.detachedPreviewRows = [];
+      if (this.batchTagOpen && this.batchTagPreviewHidden) {
+        this.batchTagPreviewHidden = false;
+      }
+      if (this.historyOpen && this.historyPreviewHidden) {
+        this.historyPreviewHidden = false;
+      }
       if (this.slideshowActive) {
         this.stopSlideshow();
       }
@@ -1522,6 +2117,13 @@ This is reversible from Admin -> Trash.`);
       this.assetViewerOpen = false;
       this.assetViewerRow = null;
       this.assetViewerError = "";
+      this.detachedPreviewRows = [];
+      if (this.batchTagOpen && this.batchTagPreviewHidden) {
+        this.batchTagPreviewHidden = false;
+      }
+      if (this.historyOpen && this.historyPreviewHidden) {
+        this.historyPreviewHidden = false;
+      }
       if (this.slideshowActive) {
         this.stopSlideshow();
       }
@@ -1550,7 +2152,7 @@ This is reversible from Admin -> Trash.`);
       } else if (row.id) {
         query.file_id = String(row.id);
       } else {
-        this.showToast("Object reference missing");
+        this.showToast(this.$t("search.object_ref_missing", "Object reference missing"));
         return;
       }
       this.$router.push({ path: "/object", query });
@@ -1560,7 +2162,7 @@ This is reversible from Admin -> Trash.`);
       this.viewerOpen = false;
       this.videoViewerOpen = false;
       this.assetViewerOpen = false;
-      this.showToast("Moved to Trash");
+      this.showToast(this.$t("search.trash_moved", "Moved to Trash"));
       this.selectedIds = [];
       await this.runSearch();
     },
@@ -1656,19 +2258,28 @@ This is reversible from Admin -> Trash.`);
     viewMode() {}
   },
   computed: {
+    assetViewerIndex() {
+      if (!this.assetViewerRow) {
+        return -1;
+      }
+      return this.results.findIndex((r) => r.id === this.assetViewerRow.id);
+    },
+    viewerResults() {
+      return this.detachedPreviewRows.length ? this.detachedPreviewRows : this.results;
+    },
     resultsSummary() {
       if (this.total === null) {
-        return "Results: —";
+        return this.$t("search.results_empty", "Results: —");
       }
       const total = Number(this.total || 0);
       if (total <= 0) {
-        return "Results: 0 of 0 (0 items)";
+        return `${this.$t("results.title", "Results")}: 0 of 0 (0 items)`;
       }
       const perPage = Math.max(1, Number(this.form.limit || 50));
       const currentPage = Math.max(1, Number(this.page || 1));
       const start = Math.min(((currentPage - 1) * perPage) + 1, total);
       const end = Math.min(currentPage * perPage, total);
-      return `Results: ${start}-${end} of ${total} (${total} items)`;
+      return `${this.$t("results.title", "Results")}: ${start}-${end} of ${total} (${total} items)`;
     },
     totalPages() {
       if (this.total === null || this.total === 0) {
@@ -1688,6 +2299,16 @@ This is reversible from Admin -> Trash.`);
         return false;
       }
       return this.snapshotFromBuilder() !== this.loadedSnapshot;
+    },
+    batchTagEligibleCount() {
+      return this.batchTagItems.filter((item) => item && item.status === "ok").length;
+    },
+    batchTagHasChangeRequest() {
+      return this.batchTagRemoveTags.length > 0 || this.normalizeBatchTag(this.batchTagAddInput) !== "";
+    },
+    batchTagConflict() {
+      const addTag = this.normalizeBatchTag(this.batchTagAddInput);
+      return addTag !== "" && this.batchTagRemoveTags.includes(addTag);
     }
   }
 };
@@ -1760,5 +2381,155 @@ This is reversible from Admin -> Trash.`);
   border: 1px solid #d6c9b5;
   border-radius: 8px;
   background: #fff;
+}
+
+.batch-tag-modal {
+  width: min(1100px, 96vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.batch-tag-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+.batch-tag-controls,
+.batch-tag-items {
+  min-height: 0;
+}
+
+.batch-tag-items {
+  overflow: auto;
+  border: 1px solid #d6c9b5;
+  border-radius: 12px;
+  padding: 10px;
+  background: #fffaf2;
+}
+
+.batch-tag-remove {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.batch-tag-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.batch-tag-common {
+  margin-top: 12px;
+}
+
+.batch-tag-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.batch-tag-item {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid #eadfcf;
+}
+
+.batch-tag-item:last-child {
+  border-bottom: 0;
+}
+
+.batch-tag-thumb {
+  width: 96px;
+}
+
+.batch-tag-thumb img {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.batch-tag-meta {
+  min-width: 0;
+}
+
+.batch-tag-path {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-tag-status {
+  font-size: 12px;
+  margin: 4px 0 8px;
+  color: #6f6556;
+}
+
+.batch-tag-status.status-error {
+  color: #b42318;
+}
+
+.batch-tag-status.status-unsupported {
+  color: #9a6700;
+}
+
+.batch-tag-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tag-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #efe2c9;
+  color: #2b2b2b;
+  font-size: 12px;
+}
+
+.batch-tag-suggestions {
+  margin-top: 8px;
+}
+
+.tag-change-row {
+  margin-top: 8px;
+}
+
+@media (max-width: 980px) {
+  .batch-tag-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-tag-item {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .batch-tag-thumb,
+  .batch-tag-thumb img {
+    width: 72px;
+    height: 72px;
+  }
+
+  .batch-tag-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+  }
 }
 </style>

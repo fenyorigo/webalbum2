@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 2.2.0 - 2026-03-14
+
+WebAlbum 2.2.0
+
+Major improvements
+
+- Database-driven localization system
+- Hungarian UI translation (100% coverage)
+- User-selectable interface language
+- Localization admin interface
+- Dynamic language management
+- Translation fallback to English
+- Normalized API error handling
+- Centralized frontend error/toast translation layer
+- Removal of hardcoded UI strings
+
+Internal improvements
+
+- UI string key system
+- Translation status (missing / draft / final)
+- Improved error messaging across the application
+
 ## 2.1.0 - 2026-03-13
 - Added cross-result slideshow controls in preview modals for images, videos, audio, and document assets.
 - Slideshow timing is user-selectable for static previews, while videos and audio now advance after playback ends.
