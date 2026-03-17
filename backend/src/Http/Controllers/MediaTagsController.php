@@ -10,6 +10,9 @@ use WebAlbum\Db\Maria;
 use WebAlbum\Db\SqliteIndex;
 use WebAlbum\Media\MediaTagEdits;
 use WebAlbum\Media\MediaTagSupport;
+use WebAlbum\Query\Model;
+use WebAlbum\Search\SearchSupport;
+use WebAlbum\Tag\SemanticTags;
 use WebAlbum\UserContext;
 
 final class MediaTagsController
@@ -244,13 +247,25 @@ final class MediaTagsController
             }
 
             $data = json_decode(file_get_contents('php://input') ?: '', true, 512, JSON_THROW_ON_ERROR);
-            $ids = $this->normalizeIds($data['ids'] ?? null);
+            $applyTo = strtolower(trim((string)($data['apply_to'] ?? 'selected')));
+            $ids = [];
+            if ($applyTo === 'all_results') {
+                if (!isset($data['search_query']) || !is_array($data['search_query'])) {
+                    throw new \InvalidArgumentException('search_query is required for all_results');
+                }
+                $query = Model::validateSearch($data['search_query']);
+                $ids = SearchSupport::resolveMediaIds($sqlite = new SqliteIndex($config['sqlite']['path']), $maria, $query, (int)$user['id'], (int)($user['is_admin'] ?? 0) === 1);
+            } else {
+                $applyTo = 'selected';
+                $ids = $this->normalizeIds($data['ids'] ?? null);
+                $sqlite = new SqliteIndex($config['sqlite']['path']);
+            }
             $removeTags = MediaTagSupport::normalizeTags(is_array($data['remove_tags'] ?? null) ? $data['remove_tags'] : []);
             $addTagRaw = isset($data['add_tag']) ? trim((string)$data['add_tag']) : '';
             $addTag = $addTagRaw !== '' ? MediaTagSupport::normalizeTag($addTagRaw) : null;
 
             if ($ids === []) {
-                throw new \InvalidArgumentException('ids array is required');
+                throw new \InvalidArgumentException($applyTo === 'all_results' ? 'No matching media found' : 'ids array is required');
             }
             if ($removeTags === [] && $addTag === null) {
                 throw new \InvalidArgumentException('Batch tag edit cannot be empty');
@@ -260,7 +275,6 @@ final class MediaTagsController
             }
 
             $batchId = MediaTagEdits::insertBatch($maria, (int)$user['id'], count($ids), $addTag, $removeTags);
-            $sqlite = new SqliteIndex($config['sqlite']['path']);
             $results = [];
             $queuedCount = 0;
             $skippedCount = 0;
@@ -297,6 +311,8 @@ final class MediaTagsController
                         ];
                         continue;
                     }
+
+                    SemanticTags::ensureMany($maria, $targetTags, (int)$user['id']);
 
                     $path = MediaTagSupport::resolveOriginalPath(
                         (string)($file['path'] ?? ''),
@@ -376,6 +392,7 @@ final class MediaTagsController
             MediaTagEdits::updateBatchSummary($maria, $batchId, $queuedCount, $skippedCount, $failedCount);
             $this->logAudit($maria, (int)$user['id'], 'media_tag_batch_queue', 'web', [
                 'batch_id' => $batchId,
+                'apply_to' => $applyTo,
                 'requested_count' => count($ids),
                 'queued_count' => $queuedCount,
                 'skipped_count' => $skippedCount,
@@ -383,11 +400,13 @@ final class MediaTagsController
                 'remove_tags' => $removeTags,
                 'add_tag' => $addTag,
                 'ids' => $ids,
+                'search_query' => $applyTo === 'all_results' ? ($data['search_query'] ?? null) : null,
             ]);
 
             $this->json([
                 'ok' => $failedCount === 0,
                 'batch_id' => $batchId,
+                'apply_to' => $applyTo,
                 'requested_count' => count($ids),
                 'processed_count' => count($results),
                 'queued_count' => $queuedCount,
@@ -530,6 +549,10 @@ final class MediaTagsController
                 'tags' => $currentTags,
                 'message' => 'No tag change',
             ];
+        }
+
+        if ($action !== 'restore_backup') {
+            SemanticTags::ensureMany($maria, $targetTags, $actorId);
         }
 
         $objectId = $this->objectIdForSha($maria, (string)($file['sha256'] ?? ''));

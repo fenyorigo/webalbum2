@@ -8,6 +8,7 @@ use WebAlbum\Db\Maria;
 use WebAlbum\Db\SqliteIndex;
 use WebAlbum\Query\Model;
 use WebAlbum\Query\Runner;
+use WebAlbum\Search\SearchSupport;
 use WebAlbum\UserContext;
 
 final class SearchController
@@ -42,8 +43,17 @@ final class SearchController
 
             $userId = (int)($user['id'] ?? 0);
             $isAdmin = (int)($user['is_admin'] ?? 0) === 1;
-            $requestedType = $this->extractRequestedType($query['where']);
-            $extFilters = $this->extractExtFilters($query['where']);
+            $semanticConstraints = SearchSupport::semanticSearchConstraints(
+                $sqlite,
+                $maria,
+                $query['where'],
+                !empty($query['semantic_tag_descendants']),
+                (string)$config['photos']['root']
+            );
+            $baseQuery = $query;
+            $baseQuery['where'] = SearchSupport::stripSemanticTagRules($query['where']);
+            $requestedType = $this->extractRequestedType($baseQuery['where']);
+            $extFilters = $this->extractExtFilters($baseQuery['where']);
             $hasNotes = !empty($query['has_notes']);
 
             // Extension filters apply only to MariaDB assets (docs/audio), so avoid mixed-source duplicates.
@@ -58,26 +68,26 @@ final class SearchController
                     return;
                 }
                 $typeFilter = ($requestedType === 'doc' || $requestedType === 'audio') ? $requestedType : null;
-                $assetResult = $this->searchAssetsOnly($maria, $sqlite, $query, $typeFilter, $extFilters, $hasNotes);
+                $assetResult = $this->searchAssetsOnly($maria, $sqlite, $baseQuery, $typeFilter, $extFilters, $hasNotes, $semanticConstraints);
                 $this->json($assetResult);
                 return;
             }
 
             if ($requestedType === 'doc' || $requestedType === 'audio') {
-                $assetResult = $this->searchAssetsOnly($maria, $sqlite, $query, $requestedType, [], $hasNotes);
+                $assetResult = $this->searchAssetsOnly($maria, $sqlite, $baseQuery, $requestedType, [], $hasNotes, $semanticConstraints);
                 $this->json($assetResult);
                 return;
             }
 
-            $mergeQuery = $this->mergeWindowQuery($query);
+            $mergeQuery = $this->mergeWindowQuery($baseQuery);
 
-            $mediaResult = $this->searchMedia($sqlite, $maria, $mergeQuery, $userId, $isAdmin, $hasNotes);
+            $mediaResult = $this->searchMedia($sqlite, $maria, $mergeQuery, $userId, $isAdmin, $hasNotes, $semanticConstraints);
             if ($requestedType === 'image' || $requestedType === 'video' || $requestedType === 'other') {
                 $this->json($mediaResult);
                 return;
             }
 
-            $assetResult = $this->searchAssetsOnly($maria, $sqlite, $mergeQuery, null, [], $hasNotes);
+            $assetResult = $this->searchAssetsOnly($maria, $sqlite, $mergeQuery, null, [], $hasNotes, $semanticConstraints);
             $merged = $this->mergeResultSets($mediaResult, $assetResult, $query, (string)$config['photos']['root']);
             $this->json($merged);
         } catch (\JsonException $e) {
@@ -87,7 +97,7 @@ final class SearchController
         }
     }
 
-    private function searchMedia(SqliteIndex $sqlite, Maria $maria, array $query, int $userId, bool $isAdmin, bool $hasNotes): array
+    private function searchMedia(SqliteIndex $sqlite, Maria $maria, array $query, int $userId, bool $isAdmin, bool $hasNotes, array $semanticConstraints): array
     {
         $runner = new Runner($sqlite);
 
@@ -100,7 +110,7 @@ final class SearchController
             $restrictIds = array_map(fn (array $row): int => (int)$row['file_id'], $favRows);
         }
         if ($hasNotes) {
-            $noteIds = $this->mediaIdsWithNotes($sqlite, $maria);
+            $noteIds = SearchSupport::mediaIdsWithNotes($sqlite, $maria);
             if ($noteIds === []) {
                 return [
                     'items' => [],
@@ -109,15 +119,44 @@ final class SearchController
                     'limit' => (int)$query['limit'],
                 ];
             }
-            $restrictIds = $this->intersectIdLists($restrictIds, $noteIds);
+            $restrictIds = SearchSupport::intersectIdLists($restrictIds, $noteIds);
+        }
+        if (($semanticConstraints['has_include'] ?? false) === true) {
+            $semanticIds = is_array($semanticConstraints['media_include_ids'] ?? null)
+                ? array_map('intval', $semanticConstraints['media_include_ids'])
+                : [];
+            if ($semanticIds === []) {
+                return [
+                    'items' => [],
+                    'total' => 0,
+                    'offset' => (int)$query['offset'],
+                    'limit' => (int)$query['limit'],
+                ];
+            }
+            $restrictIds = SearchSupport::intersectIdLists($restrictIds, $semanticIds);
+            if ($restrictIds === []) {
+                return [
+                    'items' => [],
+                    'total' => 0,
+                    'offset' => (int)$query['offset'],
+                    'limit' => (int)$query['limit'],
+                ];
+            }
         }
 
-        $excludeTags = $this->hiddenTagsForSearch($maria, $userId, $isAdmin);
+        $excludeTags = SearchSupport::hiddenTagsForSearch($maria, $userId, $isAdmin);
         $excludeRelPaths = AdminTrashController::activeTrashedRelPaths($maria);
+        if (!empty($semanticConstraints['media_exclude_rel_paths'])) {
+            $excludeRelPaths = array_values(array_unique(array_merge(
+                $excludeRelPaths,
+                array_map('strval', $semanticConstraints['media_exclude_rel_paths'])
+            )));
+        }
 
         $folderRelPath = null;
         $folderId = null;
-        if ($query['folder_id'] !== null) {
+        $folderRecursive = !empty($query['folder_recursive']);
+        if (!$folderRecursive && $query['folder_id'] !== null) {
             $folderId = (int)$query['folder_id'];
         } elseif ($query['folder_rel_path'] !== null) {
             $folderRelPath = trim(str_replace('\\', '/', (string)$query['folder_rel_path']), '/');
@@ -126,7 +165,7 @@ final class SearchController
             }
         }
 
-        $result = $runner->run($query, $restrictIds, $excludeTags, $excludeRelPaths, $folderRelPath, $folderId);
+        $result = $runner->run($query, $restrictIds, $excludeTags, $excludeRelPaths, $folderRelPath, $folderId, $folderRecursive);
         $items = $result['rows'];
 
         if ($items !== []) {
@@ -156,7 +195,7 @@ final class SearchController
         ];
     }
 
-    private function searchAssetsOnly(Maria $maria, SqliteIndex $sqlite, array $query, ?string $typeFilter, array $extFilters, bool $hasNotes): array
+    private function searchAssetsOnly(Maria $maria, SqliteIndex $sqlite, array $query, ?string $typeFilter, array $extFilters, bool $hasNotes, array $semanticConstraints): array
     {
         $limit = (int)$query['limit'];
         $offset = (int)$query['offset'];
@@ -165,6 +204,28 @@ final class SearchController
         $params = [];
 
         $where[] = "NOT EXISTS (SELECT 1 FROM wa_media_trash mt WHERE mt.rel_path = a.rel_path AND mt.status = 'trashed')";
+        if (($semanticConstraints['has_include'] ?? false) === true) {
+            $includeRelPaths = is_array($semanticConstraints['asset_include_rel_paths'] ?? null)
+                ? array_values(array_filter(array_map('strval', $semanticConstraints['asset_include_rel_paths']), static fn (string $v): bool => $v !== ''))
+                : [];
+            if ($includeRelPaths === []) {
+                return [
+                    'items' => [],
+                    'total' => 0,
+                    'offset' => $offset,
+                    'limit' => $limit,
+                ];
+            }
+            $where[] = $this->assetRelPathInClause('a.rel_path', $includeRelPaths);
+            $params = array_merge($params, $includeRelPaths);
+        }
+        $excludeRelPaths = is_array($semanticConstraints['asset_exclude_rel_paths'] ?? null)
+            ? array_values(array_filter(array_map('strval', $semanticConstraints['asset_exclude_rel_paths']), static fn (string $v): bool => $v !== ''))
+            : [];
+        if ($excludeRelPaths !== []) {
+            $where[] = 'a.rel_path NOT IN (' . implode(',', array_fill(0, count($excludeRelPaths), '?')) . ')';
+            $params = array_merge($params, $excludeRelPaths);
+        }
 
         if ($typeFilter !== null) {
             $where[] = 'a.type = ?';
@@ -497,7 +558,8 @@ final class SearchController
 
     private function assetFolderClause(array $query, SqliteIndex $sqlite): ?array
     {
-        if (!empty($query['folder_id'])) {
+        $folderRecursive = !empty($query['folder_recursive']);
+        if (!empty($query['folder_id']) && !$folderRecursive) {
             $rows = $sqlite->query('SELECT rel_path FROM directories WHERE id = ? LIMIT 1', [(int)$query['folder_id']]);
             if ($rows === []) {
                 return ['sql' => '1=0', 'params' => []];
@@ -677,6 +739,16 @@ final class SearchController
     private function dateRange(string $start, string $end): array
     {
         return [$this->dateStart($start), $this->dateEnd($end)];
+    }
+
+    private function assetRelPathInClause(string $column, array $values): string
+    {
+        $chunks = array_chunk($values, 250);
+        $parts = [];
+        foreach ($chunks as $chunk) {
+            $parts[] = $column . ' IN (' . implode(',', array_fill(0, count($chunk), '?')) . ')';
+        }
+        return '(' . implode(' OR ', $parts) . ')';
     }
 
     private function escapeLike(string $value): string

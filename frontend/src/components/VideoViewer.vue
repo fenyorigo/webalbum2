@@ -110,6 +110,11 @@
       <div v-if="currentTags.length" class="viewer-tags" :title="currentTags.join(', ')">
         {{ currentTags.join(", ") }}
       </div>
+      <div v-if="currentSemanticTags.length" class="viewer-tags semantic-viewer-tags">
+        <span v-for="item in currentSemanticTags" :key="`semantic:${item.id}`" class="tag-pill">
+          {{ item.name }}
+        </span>
+      </div>
       <div v-if="mediaError" class="viewer-badge">{{ mediaError }}</div>
       <div v-if="rotateSaving" class="viewer-badge">{{ $t("viewer.create_proposal_busy", "Creating proposal...") }}</div>
       <div v-if="toast" class="viewer-inline-toast">{{ toast }}</div>
@@ -146,6 +151,53 @@
             <span class="count">{{ item.cnt }}</span>
           </button>
         </div>
+        <div v-if="canEditTags && normalizedEditInput && !editTags.includes(normalizedEditInput)" class="modal-actions">
+          <button class="inline" type="button" @click="openSemanticCreate">
+            {{ $t("semantic_tags.create_and_assign", "Create typed tag and assign") }}
+          </button>
+        </div>
+        <div class="semantic-editor-block">
+          <div class="batch-tag-label">{{ $t("semantic_tags.current", "Typed tags") }}</div>
+          <div v-if="editSemanticTags.length" class="tag-editor-chips">
+            <span v-for="item in editSemanticTags" :key="`typed:${item.id}`" class="tag-chip">
+              {{ item.name }}
+              <small>({{ semanticSourcesLabel(item.relation_sources) }})</small>
+              <button
+                v-if="canRemoveManualSemantic(item)"
+                type="button"
+                @click="removeSemanticTag(item)"
+                :aria-label="$t('semantic_tags.remove_manual', 'Remove manual relation')"
+              >✕</button>
+            </span>
+          </div>
+          <div v-else class="muted">{{ $t("semantic_tags.none_current", "No typed tags") }}</div>
+          <label>
+            {{ $t("semantic_tags.assign_tag", "Typed tag") }}
+            <input
+              v-model="semanticInput"
+              type="text"
+              :placeholder="$t('semantic_tags.assign_placeholder', 'Search typed tag...')"
+              @input="onSemanticInput"
+            />
+          </label>
+          <div v-if="semanticSuggestions.length" class="suggestions">
+            <button
+              v-for="item in semanticSuggestions"
+              :key="`assign:${item.id}`"
+              type="button"
+              class="suggestion"
+              @click="selectSemanticSuggestion(item)"
+            >
+              <span class="name">{{ item.name }}</span>
+              <span class="count">{{ semanticTypeLabel(item.tag_type) }}</span>
+            </button>
+          </div>
+          <div class="modal-actions">
+            <button class="inline" type="button" :disabled="!semanticSelected || editLoading" @click="assignSemanticTag">
+              {{ $t("semantic_tags.assign_here", "Assign here") }}
+            </button>
+          </div>
+        </div>
         <div class="modal-actions">
           <button class="inline" @click="saveEditTags" :disabled="editLoading">{{ $t("ui.save", "Save") }}</button>
           <button class="inline" @click="restoreOriginalTags" :disabled="editLoading">{{ $t("viewer.restore_original", "Restore original") }}</button>
@@ -154,14 +206,22 @@
         <p v-if="editError" class="error">{{ editError }}</p>
       </div>
     </div>
+    <semantic-tag-create-modal
+      :is-open="semanticCreateOpen"
+      :initial-name="normalizedEditInput"
+      @close="semanticCreateOpen = false"
+      @created="handleSemanticCreated"
+    />
   </div>
 </template>
 
 <script>
 import { apiErrorMessage } from "../api-errors";
+import SemanticTagCreateModal from "./SemanticTagCreateModal.vue";
 
 export default {
   name: "VideoViewer",
+  components: { SemanticTagCreateModal },
   props: {
     results: { type: Array, required: true },
     startId: { type: Number, required: true },
@@ -190,13 +250,20 @@ export default {
       isPlaying: false,
       lastFocused: null,
       tagsById: {},
+      semanticTagsById: {},
       editOpen: false,
       editInput: "",
       editTags: [],
       editSuggestions: [],
+      editSemanticTags: [],
+      semanticInput: "",
+      semanticSelected: null,
+      semanticSuggestions: [],
       editError: "",
       editLoading: false,
       suggestTimer: null,
+      semanticSuggestTimer: null,
+      semanticCreateOpen: false,
       toast: "",
       mediaError: "",
       pendingQuarterTurns: 0,
@@ -214,12 +281,21 @@ export default {
       }
       return this.tagsById[this.current.id] || [];
     },
+    currentSemanticTags() {
+      if (!this.current) {
+        return [];
+      }
+      return this.semanticTagsById[this.current.id] || [];
+    },
     canEditTags() {
       const user = this.currentUser || window.__wa_current_user || null;
       return !!(user && user.is_admin);
     },
     canTrash() {
       return this.canEditTags;
+    },
+    normalizedEditInput() {
+      return this.normalizeTag(this.editInput);
     },
     canProposeRotate() {
       const user = this.currentUser || window.__wa_current_user || null;
@@ -246,12 +322,14 @@ export default {
           this.setIndexFromId();
           this.loadCurrentVideo();
           this.fetchCurrentTags();
+          this.fetchCurrentSemanticTags();
           this.focusFirst();
         });
         window.addEventListener("keydown", this.onKeydown);
       } else {
         this.stopPlayback(true);
         this.tagsById = {};
+        this.semanticTagsById = {};
         this.closeEditor();
         document.body.style.overflow = "";
         window.removeEventListener("keydown", this.onKeydown);
@@ -266,6 +344,7 @@ export default {
         this.setIndexFromId();
         this.loadCurrentVideo();
         this.fetchCurrentTags();
+        this.fetchCurrentSemanticTags();
       }
     },
     results() {
@@ -274,6 +353,7 @@ export default {
         this.setIndexFromId();
         this.loadCurrentVideo();
         this.fetchCurrentTags();
+        this.fetchCurrentSemanticTags();
       }
     },
     slideshowActive() {
@@ -326,6 +406,7 @@ export default {
         this.index = targetIndex;
         this.loadCurrentVideo();
         this.fetchCurrentTags();
+        this.fetchCurrentSemanticTags();
         return;
       }
       this.stopPlayback(true);
@@ -337,7 +418,7 @@ export default {
         this.$emit("open-image", row.id);
         return;
       }
-      this.showToast("Preview not supported for this file type");
+      this.showToast(this.$t("search.preview_unsupported", "Preview not supported for this file type"));
     },
     toggleSlideshow() {
       if (this.slideshowActive) {
@@ -546,11 +627,36 @@ export default {
         this.tagsById = { ...this.tagsById, [this.current.id]: [] };
       }
     },
+    async fetchCurrentSemanticTags() {
+      if (!this.current || !this.currentUser || this.semanticTagsById[this.current.id]) {
+        return;
+      }
+      try {
+        const params = new URLSearchParams({ entity_type: "media", id: String(this.current.id) });
+        const res = await fetch(`/api/semantic-tags/target?${params.toString()}`);
+        if (!res.ok) {
+          this.semanticTagsById = { ...this.semanticTagsById, [this.current.id]: [] };
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        this.semanticTagsById = {
+          ...this.semanticTagsById,
+          [this.current.id]: Array.isArray(data.items) ? data.items : []
+        };
+      } catch (_e) {
+        this.semanticTagsById = { ...this.semanticTagsById, [this.current.id]: [] };
+      }
+    },
     openEditor() {
       this.editError = "";
       this.editInput = "";
+      this.semanticInput = "";
+      this.semanticSelected = null;
+      this.semanticSuggestions = [];
       this.editSuggestions = [];
       this.editTags = [...this.currentTags];
+      this.editSemanticTags = [...this.currentSemanticTags];
+      this.semanticCreateOpen = false;
       this.editOpen = true;
     },
     closeEditor() {
@@ -558,17 +664,59 @@ export default {
       this.editLoading = false;
       this.editError = "";
       this.editInput = "";
+      this.semanticInput = "";
+      this.semanticSelected = null;
+      this.semanticSuggestions = [];
       this.editSuggestions = [];
+      this.semanticCreateOpen = false;
       if (this.suggestTimer) {
         clearTimeout(this.suggestTimer);
         this.suggestTimer = null;
       }
+      if (this.semanticSuggestTimer) {
+        clearTimeout(this.semanticSuggestTimer);
+        this.semanticSuggestTimer = null;
+      }
+    },
+    openSemanticCreate() {
+      if (!this.normalizedEditInput) {
+        return;
+      }
+      this.semanticCreateOpen = true;
+    },
+    handleSemanticCreated(item) {
+      this.semanticCreateOpen = false;
+      const name = item && item.name ? String(item.name) : this.normalizedEditInput;
+      if (!name) {
+        return;
+      }
+      this.addEditTag(name);
+      this.toast = this.$t("semantic_tags.created_and_assigned", "Typed tag created and added");
+      setTimeout(() => {
+        this.toast = "";
+      }, 2000);
+      this.semanticSelected = item || null;
+      this.semanticInput = name;
+      this.assignSemanticTag();
     },
     normalizeTag(raw) {
       if (typeof raw !== "string") {
         return "";
       }
       return raw.trim().replace(/\s+/g, " ");
+    },
+    semanticTypeLabel(type) {
+      if (type === "person") return this.$t("semantic_tags.type_person", "Person");
+      if (type === "event") return this.$t("semantic_tags.type_event", "Event");
+      if (type === "category") return this.$t("semantic_tags.type_category", "Category");
+      return this.$t("semantic_tags.type_generic", "Generic");
+    },
+    semanticSourcesLabel(sources) {
+      const values = Array.isArray(sources) ? sources : [];
+      return values.map((source) => this.$t(`semantic_tags.source_${source}`, source)).join(", ");
+    },
+    canRemoveManualSemantic(item) {
+      return !!(item && Array.isArray(item.relation_sources) && item.relation_sources.includes("manual"));
     },
     validateTag(tag) {
       if (!tag) {
@@ -581,6 +729,118 @@ export default {
         return this.$t("viewer.tag_pipe_forbidden", "Tag must not contain pipe character");
       }
       return "";
+    },
+    onSemanticInput() {
+      this.semanticSelected = null;
+      if (this.semanticSuggestTimer) {
+        clearTimeout(this.semanticSuggestTimer);
+      }
+      const q = this.normalizeTag(this.semanticInput);
+      if (q.length < 2) {
+        this.semanticSuggestions = [];
+        return;
+      }
+      this.semanticSuggestTimer = setTimeout(() => {
+        this.fetchSemanticSuggestions(q);
+      }, 150);
+    },
+    async fetchSemanticSuggestions(q) {
+      try {
+        const params = new URLSearchParams({ q, limit: "12" });
+        const res = await fetch(`/api/admin/semantic-tags/lookup?${params.toString()}`);
+        if (!res.ok) {
+          this.semanticSuggestions = [];
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        this.semanticSuggestions = Array.isArray(data.items) ? data.items : [];
+      } catch (_e) {
+        this.semanticSuggestions = [];
+      }
+    },
+    selectSemanticSuggestion(item) {
+      this.semanticSelected = item;
+      this.semanticInput = item.name || "";
+      this.semanticSuggestions = [];
+    },
+    async assignSemanticTag() {
+      if (!this.current || !this.semanticSelected) {
+        return;
+      }
+      this.editLoading = true;
+      this.editError = "";
+      try {
+        const res = await fetch("/api/admin/semantic-tags/assign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            apply_to: "selected",
+            ids: [this.current.id],
+            semantic_tag_id: this.semanticSelected.id
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.editError = apiErrorMessage(data.error, "semantic_tags.assign_submit_failed", "Failed to assign typed tag");
+          return;
+        }
+        await this.forceRefreshSemanticTags();
+        this.semanticInput = "";
+        this.semanticSelected = null;
+        this.semanticSuggestions = [];
+      } catch (_e) {
+        this.editError = this.$t("semantic_tags.assign_submit_failed", "Failed to assign typed tag");
+      } finally {
+        this.editLoading = false;
+      }
+    },
+    async removeSemanticTag(item) {
+      if (!this.current || !item || !item.id) {
+        return;
+      }
+      this.editLoading = true;
+      this.editError = "";
+      try {
+        const res = await fetch("/api/admin/semantic-tags/unassign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ids: [this.current.id],
+            semantic_tag_id: item.id
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.editError = apiErrorMessage(data.error, "semantic_tags.unassign_failed", "Failed to remove typed tag relation");
+          return;
+        }
+        await this.forceRefreshSemanticTags();
+        this.toast = this.$t("semantic_tags.unassign_done", "Typed tag relation removed.");
+        setTimeout(() => {
+          this.toast = "";
+        }, 2000);
+      } catch (_e) {
+        this.editError = this.$t("semantic_tags.unassign_failed", "Failed to remove typed tag relation");
+      } finally {
+        this.editLoading = false;
+      }
+    },
+    async forceRefreshSemanticTags() {
+      if (!this.current) {
+        return;
+      }
+      this.semanticTagsById = { ...this.semanticTagsById, [this.current.id]: null };
+      await this.fetchCurrentSemanticTags();
+      this.editSemanticTags = [...this.currentSemanticTags];
+    },
+    showToast(message) {
+      this.toast = message || "";
+      if (!this.toast) {
+        return;
+      }
+      setTimeout(() => {
+        this.toast = "";
+      }, 2000);
     },
     addEditTagFromInput() {
       this.addEditTag(this.editInput);

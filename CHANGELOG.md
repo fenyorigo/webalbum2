@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 3.0.0b - 2026-03-17
+
+- Added the typed-tag foundation for WebAlbum 3.0.
+- Added semantic tag management, manual media-tag links, typed-tag search, parent hierarchy, and descendant search.
+- Added exact all-results typed-tag assignment scope and recursive folder-aware resolution.
+
 ## 2.2.0 - 2026-03-14
 
 WebAlbum 2.2.0

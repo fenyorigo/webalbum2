@@ -11,6 +11,7 @@ final class Model
     private const FIELD_OPS = [
         "id" => ["is"],
         "tag" => ["is", "is_not"],
+        "semantic_tag" => ["is", "is_not"],
         "taken" => ["before", "after", "between"],
         "type" => ["is", "is_not"],
         "path" => ["contains", "starts_with"],
@@ -33,6 +34,8 @@ final class Model
         $hasNotes = false;
         $folderRelPath = null;
         $folderId = null;
+        $folderRecursive = false;
+        $semanticTagDescendants = false;
         if (array_key_exists("only_favorites", $whereInput)) {
             if (!is_bool($whereInput["only_favorites"])) {
                 throw new \InvalidArgumentException("where.only_favorites must be a boolean");
@@ -67,6 +70,20 @@ final class Model
             $folderId = $value;
             unset($whereInput["folder_id"]);
         }
+        if (array_key_exists("folder_recursive", $whereInput)) {
+            if (!is_bool($whereInput["folder_recursive"])) {
+                throw new \InvalidArgumentException("where.folder_recursive must be a boolean");
+            }
+            $folderRecursive = $whereInput["folder_recursive"];
+            unset($whereInput["folder_recursive"]);
+        }
+        if (array_key_exists("semantic_tag_descendants", $whereInput)) {
+            if (!is_bool($whereInput["semantic_tag_descendants"])) {
+                throw new \InvalidArgumentException("where.semantic_tag_descendants must be a boolean");
+            }
+            $semanticTagDescendants = $whereInput["semantic_tag_descendants"];
+            unset($whereInput["semantic_tag_descendants"]);
+        }
         $where = self::validateGroup($whereInput);
 
         $sort = null;
@@ -99,6 +116,8 @@ final class Model
             "has_notes" => $hasNotes,
             "folder_rel_path" => $folderRelPath,
             "folder_id" => $folderId,
+            "folder_recursive" => $folderRecursive,
+            "semantic_tag_descendants" => $semanticTagDescendants,
         ];
     }
 
@@ -209,6 +228,10 @@ final class Model
         } elseif ($field === "tag") {
             if (!is_string($value) || $value === "") {
                 throw new \InvalidArgumentException("tag value must be a non-empty string");
+            }
+        } elseif ($field === "semantic_tag") {
+            if (!is_int($value) || $value < 1) {
+                throw new \InvalidArgumentException("semantic_tag must be a positive integer");
             }
         } elseif ($field === "taken") {
             if ($op === "between") {

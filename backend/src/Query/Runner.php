@@ -15,7 +15,7 @@ final class Runner
         $this->db = $db;
     }
 
-    public function run(array $query, ?array $restrictIds = null, array $excludeTags = [], array $excludeRelPaths = [], ?string $folderRelPath = null, ?int $folderId = null): array
+    public function run(array $query, ?array $restrictIds = null, array $excludeTags = [], array $excludeRelPaths = [], ?string $folderRelPath = null, ?int $folderId = null, bool $folderRecursive = false): array
     {
         [$whereSql, $params] = Compiler::compileWhere($query["where"]);
 
@@ -52,7 +52,7 @@ final class Runner
 
         $folderClause = "";
         $folderParams = [];
-        if (is_int($folderId) && $folderId > 0) {
+        if (is_int($folderId) && $folderId > 0 && !$folderRecursive) {
             // Tree selection: direct folder only (no subtree).
             $folderClause = " AND files.directory_id = ?";
             $folderParams[] = $folderId;

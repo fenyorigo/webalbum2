@@ -98,14 +98,80 @@
         </tbody>
       </table>
     </section>
+
+    <section v-if="isAdmin" class="panel semantic-tags-panel">
+      <div class="row">
+        <label>
+          {{ $t("semantic_tags.search", "Semantic tag search") }}
+          <input v-model.trim="semanticQuery" :placeholder="$t('semantic_tags.search_placeholder', 'Find typed tags...')" />
+        </label>
+        <label>
+          {{ $t("semantic_tags.type", "Tag type") }}
+          <select v-model="semanticType" @change="fetchSemanticTags">
+            <option value="">{{ $t("status.all", "All") }}</option>
+            <option value="person">{{ $t("semantic_tags.type_person", "Person") }}</option>
+            <option value="event">{{ $t("semantic_tags.type_event", "Event") }}</option>
+            <option value="category">{{ $t("semantic_tags.type_category", "Category") }}</option>
+            <option value="generic">{{ $t("semantic_tags.type_generic", "Generic") }}</option>
+          </select>
+        </label>
+        <label>
+          {{ $t("semantic_tags.active", "Active") }}
+          <select v-model="semanticActive" @change="fetchSemanticTags">
+            <option value="all">{{ $t("status.all", "All") }}</option>
+            <option value="active">{{ $t("common.active", "Active") }}</option>
+            <option value="inactive">{{ $t("common.inactive", "Inactive") }}</option>
+          </select>
+        </label>
+        <button class="inline" :disabled="loading" @click="fetchSemanticTags">{{ $t("ui.refresh", "Refresh") }}</button>
+        <button class="inline" :disabled="loading" @click="openSemanticCreate">{{ $t("semantic_tags.add", "Add typed tag") }}</button>
+      </div>
+      <p v-if="semanticError" class="error">{{ semanticError }}</p>
+      <table class="tags-table" v-if="semanticRows.length">
+        <thead>
+          <tr>
+            <th>{{ $t("semantic_tags.name", "Tag name") }}</th>
+            <th>{{ $t("semantic_tags.type", "Tag type") }}</th>
+            <th>{{ $t("semantic_tags.parent", "Parent tag") }}</th>
+            <th>{{ $t("semantic_tags.usage", "Usage") }}</th>
+            <th>{{ $t("semantic_tags.usage_state", "State") }}</th>
+            <th>{{ $t("common.active", "Active") }}</th>
+            <th>{{ $t("object.action", "Action") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in semanticRows" :key="row.id">
+            <td>{{ row.name }}</td>
+            <td>{{ semanticTypeLabel(row.tag_type) }}</td>
+            <td>{{ row.parent_tag_name || "—" }}</td>
+            <td>{{ row.usage_count || 0 }}</td>
+            <td>{{ row.usage_state === "orphan" ? $t("semantic_tags.orphan", "Orphan") : $t("semantic_tags.used", "Used") }}</td>
+            <td>{{ row.is_active ? $t("common.active", "Active") : $t("common.inactive", "Inactive") }}</td>
+            <td>
+              <button class="inline" type="button" @click="openSemanticEdit(row)">{{ $t("common.edit", "Edit") }}</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="muted">{{ $t("semantic_tags.empty", "No typed tags yet.") }}</p>
+    </section>
+    <semantic-tag-create-modal
+      :is-open="semanticModalOpen"
+      :initial-name="semanticInitialName"
+      :edit-item="semanticEditItem"
+      @close="closeSemanticModal"
+      @created="handleSemanticSaved"
+    />
   </div>
 </template>
 
 <script>
 import { apiErrorMessage } from "../api-errors";
+import SemanticTagCreateModal from "../components/SemanticTagCreateModal.vue";
 
 export default {
   name: "TagsPage",
+  components: { SemanticTagCreateModal },
   data() {
     return {
       query: "",
@@ -121,13 +187,24 @@ export default {
       isAdmin: false,
       revealHidden: false,
       sortField: "tag",
-      sortDir: "asc"
+      sortDir: "asc",
+      semanticRows: [],
+      semanticQuery: "",
+      semanticType: "",
+      semanticActive: "all",
+      semanticError: "",
+      semanticModalOpen: false,
+      semanticInitialName: "",
+      semanticEditItem: null
     };
   },
   mounted() {
     const current = window.__wa_current_user || null;
     this.isAdmin = !!(current && current.is_admin);
     this.fetchTags();
+    if (this.isAdmin) {
+      this.fetchSemanticTags();
+    }
   },
   computed: {
     totalPages() {
@@ -170,6 +247,9 @@ export default {
         }
 
         this.isAdmin = !!data.is_admin;
+        if (this.isAdmin && this.semanticRows.length === 0) {
+          this.fetchSemanticTags();
+        }
         this.rows = (data.rows || []).map((row) => ({
           ...row,
           enabled_global: !!row.enabled_global,
@@ -190,6 +270,58 @@ export default {
       } finally {
         this.loading = false;
       }
+    },
+    semanticTypeLabel(type) {
+      if (type === "person") return this.$t("semantic_tags.type_person", "Person");
+      if (type === "event") return this.$t("semantic_tags.type_event", "Event");
+      if (type === "category") return this.$t("semantic_tags.type_category", "Category");
+      return this.$t("semantic_tags.type_generic", "Generic");
+    },
+    async fetchSemanticTags() {
+      if (!this.isAdmin) {
+        return;
+      }
+      this.semanticError = "";
+      try {
+        const qs = new URLSearchParams({
+          page: "1",
+          page_size: "200",
+          active: this.semanticActive
+        });
+        if (this.semanticQuery) qs.set("q", this.semanticQuery);
+        if (this.semanticType) qs.set("tag_type", this.semanticType);
+        const res = await fetch(`/api/admin/semantic-tags?${qs.toString()}`);
+        if (this.handleAuthError(res)) {
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.semanticError = apiErrorMessage(data.error, "semantic_tags.load_failed", "Failed to load typed tags");
+          return;
+        }
+        this.semanticRows = Array.isArray(data.items) ? data.items : [];
+      } catch (_e) {
+        this.semanticError = this.$t("semantic_tags.load_failed", "Failed to load typed tags");
+      }
+    },
+    openSemanticCreate() {
+      this.semanticInitialName = "";
+      this.semanticEditItem = null;
+      this.semanticModalOpen = true;
+    },
+    openSemanticEdit(row) {
+      this.semanticInitialName = "";
+      this.semanticEditItem = row;
+      this.semanticModalOpen = true;
+    },
+    closeSemanticModal() {
+      this.semanticModalOpen = false;
+      this.semanticEditItem = null;
+      this.semanticInitialName = "";
+    },
+    handleSemanticSaved() {
+      this.closeSemanticModal();
+      this.fetchSemanticTags();
     },
     markDirty(row) {
       const original = this.original[row.tag];

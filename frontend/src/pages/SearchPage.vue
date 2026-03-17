@@ -71,6 +71,35 @@
           {{ $t("search.media_ids", "Media ID(s)") }}
           <input v-model.trim="form.mediaIds" placeholder="4490, 3579, 1107" />
         </label>
+        <label class="tags">
+          {{ $t("search.semantic_tag", "Typed tag") }}
+          <input
+            v-model.trim="searchSemanticInput"
+            type="text"
+            :placeholder="$t('search.semantic_tag_placeholder', 'Search typed tag...')"
+            @input="onSearchSemanticInput"
+          />
+          <div v-if="searchSemanticSuggestions.length" class="suggestions">
+            <button
+              v-for="item in searchSemanticSuggestions"
+              :key="`search-semantic:${item.id}`"
+              type="button"
+              class="suggestion"
+              @click="applySearchSemanticSuggestion(item)"
+            >
+              <span class="name">{{ item.name }}</span>
+              <span class="count">{{ semanticTypeLabel(item.tag_type) }}</span>
+            </button>
+          </div>
+          <p v-if="searchSemanticSelected" class="muted">
+            {{ $t("search.semantic_tag_selected", { name: searchSemanticSelected.name }, "Selected typed tag: {name}") }}
+            <button type="button" class="inline" @click="clearSearchSemanticTag">{{ $t("ui.clear", "Clear") }}</button>
+          </p>
+          <label v-if="searchSemanticSelected" class="checkbox">
+            <input type="checkbox" v-model="searchSemanticIncludeDescendants" />
+            {{ $t("search.semantic_tag_descendants", "Include descendants") }}
+          </label>
+        </label>
       </div>
       <div class="row">
         <label>
@@ -159,6 +188,10 @@
       <div class="row actions">
         <button @click="runSearch(true)" :disabled="loading">{{ $t("search.button", "Search") }}</button>
         <span v-if="selectedFolder" class="pill folder-pill" :title="selectedFolder.rel_path">{{ $t("search.folder", "Folder") }}: {{ selectedFolder.rel_path }}</span>
+        <label v-if="selectedFolder" class="checkbox">
+          <input type="checkbox" v-model="form.folderRecursive" />
+          {{ $t("search.folder_recursive", "Recursive") }}
+        </label>
         <button v-if="selectedFolder" class="clear" type="button" @click="clearFolderFilter">{{ $t("search.folder_clear", "Clear folder filter") }}</button>
         <button @click="openSaveModal" :disabled="loading">{{ $t("search.save_search", "Save search") }}</button>
         <button v-if="isAdmin" @click="openTagHistoryModal" :disabled="loading">{{ $t("search.tag_changes", "Tag changes") }}</button>
@@ -216,10 +249,18 @@
         <button
           v-if="isAdmin"
           class="inline"
-          :disabled="loading || selectedIds.length === 0"
+          :disabled="loading || batchTagOpenDisabled"
           @click="openBatchTagModal"
         >
-          {{ $t("search.batch_tag_edit", "Batch tag edit") }} ({{ selectedIds.length }})
+          {{ $t("search.batch_tag_edit", "Batch tag edit") }} ({{ selectedIds.length || total || 0 }})
+        </button>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || batchTagOpenDisabled"
+          @click="openSemanticAssignModal"
+        >
+          {{ $t("semantic_tags.assign", "Assign typed tag") }} ({{ selectedIds.length || total || 0 }})
         </button>
         <span class="note">{{ $t("search.download_limit_note", "Max 20 files per ZIP") }}</span>
         <button
@@ -279,10 +320,18 @@
         <button
           v-if="isAdmin"
           class="inline"
-          :disabled="loading || selectedIds.length === 0"
+          :disabled="loading || batchTagOpenDisabled"
           @click="openBatchTagModal"
         >
-          {{ $t("search.batch_tag_edit", "Batch tag edit") }} ({{ selectedIds.length }})
+          {{ $t("search.batch_tag_edit", "Batch tag edit") }} ({{ selectedIds.length || total || 0 }})
+        </button>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || batchTagOpenDisabled"
+          @click="openSemanticAssignModal"
+        >
+          {{ $t("semantic_tags.assign", "Assign typed tag") }} ({{ selectedIds.length || total || 0 }})
         </button>
         <span class="note">Max 20 files per ZIP</span>
         <button
@@ -316,10 +365,18 @@
         <button
           v-if="isAdmin"
           class="inline"
-          :disabled="loading || selectedIds.length === 0"
+          :disabled="loading || batchTagOpenDisabled"
           @click="openBatchTagModal"
         >
-          {{ $t("search.batch_tag_edit", "Batch tag edit") }} ({{ selectedIds.length }})
+          {{ $t("search.batch_tag_edit", "Batch tag edit") }} ({{ selectedIds.length || total || 0 }})
+        </button>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || batchTagOpenDisabled"
+          @click="openSemanticAssignModal"
+        >
+          {{ $t("semantic_tags.assign", "Assign typed tag") }} ({{ selectedIds.length || total || 0 }})
         </button>
         <span class="note">{{ $t("search.download_limit_note", "Max 20 files per ZIP") }}</span>
       </div>
@@ -421,10 +478,18 @@
         </div>
         <p class="muted">
           {{ $t("search.batch_selected_count", { count: selectedIds.length }, "Selected: {count}.") }}
+          {{ $t("search.batch_total_count", { count: total || 0 }, "Matching results: {count}.") }}
           {{ $t("search.batch_eligible_count", { count: batchTagEligibleCount }, "Eligible media: {count}.") }}
         </p>
         <div class="batch-tag-layout">
           <section class="batch-tag-controls">
+            <label>
+              {{ $t("search.batch_scope", "Apply to") }}
+              <select v-model="batchTagScope">
+                <option value="selected">{{ $t("search.batch_scope_selected", "Selected items") }}</option>
+                <option value="all_results">{{ $t("search.batch_scope_all_results", "All search results") }}</option>
+              </select>
+            </label>
             <label>
               {{ $t("viewer.add_tag_label", "Add tag") }}
               <input
@@ -444,6 +509,11 @@
               >
                 <span class="name">{{ item.tag }}</span>
                 <span class="count">{{ item.cnt }}</span>
+              </button>
+            </div>
+            <div v-if="isAdmin && normalizeBatchTag(batchTagAddInput)" class="modal-actions">
+              <button class="inline" type="button" @click="openBatchSemanticTagCreate">
+                {{ $t("semantic_tags.create_and_assign", "Create typed tag and assign") }}
               </button>
             </div>
             <div v-if="batchTagCommonTags.length" class="batch-tag-common">
@@ -548,6 +618,103 @@
         </div>
       </div>
     </div>
+    <semantic-tag-create-modal
+      :is-open="batchSemanticTagCreateOpen"
+      :initial-name="normalizeBatchTag(batchTagAddInput)"
+      @close="batchSemanticTagCreateOpen = false"
+      @created="onBatchSemanticTagCreated"
+    />
+    <div v-if="semanticAssignOpen" class="modal-backdrop" @click.self="closeSemanticAssignModal">
+      <div class="modal batch-tag-modal">
+        <div class="modal-header">
+          <h3>{{ $t("semantic_tags.assign_title", "Assign typed tag") }}</h3>
+          <button class="inline" type="button" @click="closeSemanticAssignModal">{{ $t("ui.close", "Close") }}</button>
+        </div>
+        <div class="batch-tag-layout">
+          <section class="batch-tag-controls">
+            <label>
+              {{ $t("semantic_tags.assign_scope", "Apply to") }}
+              <select v-model="semanticAssignScope" @change="refreshSemanticAssignPreview">
+                <option value="selected">{{ $t("semantic_tags.assign_selected", "Selected items") }}</option>
+                <option value="all_results">{{ $t("semantic_tags.assign_all_results", "All search results") }}</option>
+              </select>
+            </label>
+            <label>
+              {{ $t("semantic_tags.assign_tag", "Typed tag") }}
+              <input
+                v-model.trim="semanticAssignInput"
+                type="text"
+                :placeholder="$t('semantic_tags.assign_placeholder', 'Search typed tag...')"
+                @input="onSemanticAssignInput"
+              />
+            </label>
+            <div v-if="semanticAssignSuggestions.length" class="suggestions batch-tag-suggestions">
+              <button
+                v-for="item in semanticAssignSuggestions"
+                :key="`sem:${item.id}`"
+                type="button"
+                class="suggestion"
+                @click="selectSemanticAssignSuggestion(item)"
+              >
+                <span class="name">{{ item.name }}</span>
+                <span class="count">{{ semanticTypeLabel(item.tag_type) }}</span>
+              </button>
+            </div>
+            <div v-if="normalizeBatchTag(semanticAssignInput) && !semanticAssignSelected" class="modal-actions">
+              <button class="inline" type="button" @click="openSemanticAssignCreate">
+                {{ $t("semantic_tags.create_and_assign", "Create typed tag and assign") }}
+              </button>
+            </div>
+            <p v-if="semanticAssignSelected" class="muted">
+              {{ $t("semantic_tags.assign_selected_tag", { name: semanticAssignSelected.name }, "Selected typed tag: {name}") }}
+            </p>
+            <p class="muted">{{ $t("semantic_tags.assign_count", { count: semanticAssignCount }, "Matching items: {count}.") }}</p>
+            <p v-if="semanticAssignError" class="error">{{ semanticAssignError }}</p>
+            <div class="modal-actions">
+              <button class="inline" type="button" :disabled="semanticAssignSubmitting" @click="refreshSemanticAssignPreview">
+                {{ $t("ui.refresh", "Refresh") }}
+              </button>
+              <button class="inline" type="button" :disabled="semanticAssignSubmitting || !semanticAssignSelected" @click="submitSemanticAssign">
+                {{ $t("ui.apply", "Apply") }}
+              </button>
+              <button class="inline" type="button" :disabled="semanticAssignSubmitting" @click="closeSemanticAssignModal">
+                {{ $t("ui.cancel", "Cancel") }}
+              </button>
+            </div>
+          </section>
+          <section class="batch-tag-items">
+            <div v-if="semanticAssignLoading" class="muted">{{ $t("common.loading", "Loading...") }}</div>
+            <div v-else-if="!semanticAssignItems.length" class="muted">{{ $t("search.batch_no_items", "No selected items.") }}</div>
+            <article
+              v-for="item in semanticAssignItems"
+              :key="`semantic-assign:${item.entity_type}:${item.rel_path}`"
+              class="batch-tag-item"
+            >
+              <div class="batch-tag-thumb">
+                <img
+                  v-if="item.entity_type === 'media' || item.type === 'doc'"
+                  :src="item.entity_type === 'media' ? thumbUrl({ id: item.source_id, type: item.type }) : thumbUrl({ id: -item.source_id, asset_id: item.source_id, type: item.type, entity: 'asset' })"
+                  :alt="fileName(item.path || item.rel_path)"
+                  loading="lazy"
+                  class="thumb-img loaded"
+                />
+                <span v-else class="thumb-placeholder">{{ item.type === 'audio' ? '♪' : '?' }}</span>
+              </div>
+              <div class="batch-tag-meta">
+                <div class="batch-tag-path" :title="item.rel_path">{{ item.rel_path }}</div>
+                <div class="batch-tag-status">{{ item.entity_type }} <span v-if="item.type">({{ item.type }})</span></div>
+              </div>
+            </article>
+          </section>
+        </div>
+      </div>
+    </div>
+    <semantic-tag-create-modal
+      :is-open="semanticAssignCreateOpen"
+      :initial-name="normalizeBatchTag(semanticAssignInput)"
+      @close="semanticAssignCreateOpen = false"
+      @created="onSemanticAssignCreated"
+    />
     <div v-if="replaceOpen" class="modal-backdrop" @click.self="closeReplaceModal">
       <div class="modal">
         <h3>{{ $t("search.replace_saved_title", "Replace saved search?") }}</h3>
@@ -651,11 +818,12 @@ import ResultsList from "../components/ResultsList.vue";
 import ImageViewer from "../components/ImageViewer.vue";
 import VideoViewer from "../components/VideoViewer.vue";
 import FolderTree from "../components/FolderTree.vue";
+import SemanticTagCreateModal from "../components/SemanticTagCreateModal.vue";
 import { apiErrorMessage } from "../api-errors";
 
 export default {
   name: "SearchPage",
-  components: { ResultsGrid, ResultsList, ImageViewer, VideoViewer, FolderTree },
+  components: { ResultsGrid, ResultsList, ImageViewer, VideoViewer, FolderTree, SemanticTagCreateModal },
   data() {
     return {
       loading: false,
@@ -679,6 +847,7 @@ export default {
         ext: "",
         onlyFavorites: false,
         hasNotes: false,
+        folderRecursive: false,
         sortField: "path",
         sortDir: "asc",
         limit: 50
@@ -707,6 +876,11 @@ export default {
       loadedQuery: null,
       loadedSnapshot: "",
       selectedFolder: null,
+      searchSemanticInput: "",
+      searchSemanticSelected: null,
+      searchSemanticSuggestions: [],
+      searchSemanticSuggestTimer: null,
+      searchSemanticIncludeDescendants: false,
       assetViewerOpen: false,
       assetViewerRow: null,
       assetViewerError: "",
@@ -723,10 +897,24 @@ export default {
       batchTagCommonTags: [],
       batchTagRemoveTags: [],
       batchTagAddInput: "",
+      batchTagScope: "selected",
       batchTagSuggestions: [],
       batchTagSuggestTimer: null,
       batchTagSummary: null,
       batchTagPreviewHidden: false,
+      batchSemanticTagCreateOpen: false,
+      semanticAssignOpen: false,
+      semanticAssignLoading: false,
+      semanticAssignSubmitting: false,
+      semanticAssignError: "",
+      semanticAssignScope: "selected",
+      semanticAssignInput: "",
+      semanticAssignSelected: null,
+      semanticAssignSuggestions: [],
+      semanticAssignSuggestTimer: null,
+      semanticAssignItems: [],
+      semanticAssignCount: 0,
+      semanticAssignCreateOpen: false,
       historyOpen: false,
       historyLoading: false,
       historyError: "",
@@ -928,6 +1116,7 @@ export default {
       this.loadedSearchName = name || "";
       this.loadedQuery = JSON.parse(JSON.stringify(query));
       this.loadedSnapshot = this.snapshotFromQuery(this.loadedQuery);
+      this.syncSearchSemanticFromWhere((query.where && typeof query.where === "object") ? query.where : {});
       this.persistFolderFilter();
       this.savedBanner = name ? `${this.$t("search.loaded_from_saved", "Loaded from saved search")}: ${name}` : "";
       if (options.autoRun) {
@@ -973,6 +1162,7 @@ export default {
         .map((item) => item.value);
       const pathItem = items.find((item) => item && item.field === "path");
       const idItem = items.find((item) => item && item.field === "id" && item.op === "is");
+      const semanticTagItem = items.find((item) => item && item.field === "semantic_tag" && item.op === "is");
       const typeItem = items.find((item) => item && item.field === "type" && item.op === "is");
       const extItem = items.find((item) => item && item.field === "ext" && item.op === "is");
       const takenItem = items.find((item) => item && item.field === "taken");
@@ -995,10 +1185,20 @@ export default {
         ext: extItem && typeof extItem.value === "string" ? extItem.value : "",
         onlyFavorites: !!where.only_favorites,
         hasNotes: !!where.has_notes,
+        folderRecursive: !!where.folder_recursive,
         sortField: "path",
         sortDir: "asc",
         limit: 50
       };
+
+      if (semanticTagItem && Number.isInteger(semanticTagItem.value)) {
+        this.searchSemanticSelected = { id: semanticTagItem.value, name: `#${semanticTagItem.value}` };
+        this.searchSemanticInput = `#${semanticTagItem.value}`;
+      } else {
+        this.searchSemanticSelected = null;
+        this.searchSemanticInput = "";
+      }
+      this.searchSemanticIncludeDescendants = !!where.semantic_tag_descendants;
 
       includeTags.forEach((tag) => form.tags.push({ value: tag, mode: "include" }));
       excludeTags.forEach((tag) => form.tags.push({ value: tag, mode: "exclude" }));
@@ -1052,6 +1252,9 @@ export default {
       if (this.form.path) {
         items.push({ field: "path", op: "contains", value: this.form.path });
       }
+      if (this.searchSemanticSelected && this.searchSemanticSelected.id) {
+        items.push({ field: "semantic_tag", op: "is", value: Number(this.searchSemanticSelected.id) });
+      }
       const mediaIds = this.parseMediaIds(this.form.mediaIds);
       if (mediaIds.length === 1) {
         items.push({ field: "id", op: "is", value: mediaIds[0] });
@@ -1080,16 +1283,50 @@ export default {
         group: "ALL",
         items,
         only_favorites: this.form.onlyFavorites,
-        has_notes: !!this.form.hasNotes
+        has_notes: !!this.form.hasNotes,
+        folder_recursive: !!this.form.folderRecursive,
+        semantic_tag_descendants: !!(this.searchSemanticSelected && this.searchSemanticIncludeDescendants)
       };
-      if (this.selectedFolder && this.selectedFolder.id) {
-        // Tree-selected folder should filter direct files only.
-        where.folder_id = this.selectedFolder.id;
-      } else if (this.selectedFolder && this.selectedFolder.rel_path) {
-        // Backward-compatible fallback for saved payloads.
+      if (this.selectedFolder && this.selectedFolder.rel_path) {
         where.folder_rel_path = this.selectedFolder.rel_path;
       }
+      if (this.selectedFolder && this.selectedFolder.id && !this.form.folderRecursive) {
+        // Tree-selected folder should filter direct files only.
+        where.folder_id = this.selectedFolder.id;
+      }
       return where;
+    },
+    async syncSearchSemanticFromWhere(where) {
+      const items = Array.isArray(where.items) ? where.items : [];
+      const semanticRule = items.find((item) => item && item.field === "semantic_tag" && item.op === "is" && Number.isInteger(item.value));
+      if (!semanticRule) {
+        this.searchSemanticSelected = null;
+        this.searchSemanticInput = "";
+        this.searchSemanticSuggestions = [];
+        this.searchSemanticIncludeDescendants = false;
+        return;
+      }
+      const id = Number(semanticRule.value || 0);
+      if (!id) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/semantic-tags/${id}`);
+        if (this.handleAuthError(res)) {
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.item) {
+          this.searchSemanticSelected = { id, name: `#${id}` };
+          this.searchSemanticInput = `#${id}`;
+          return;
+        }
+        this.searchSemanticSelected = data.item;
+        this.searchSemanticInput = data.item.name || `#${id}`;
+      } catch (_e) {
+        this.searchSemanticSelected = { id, name: `#${id}` };
+        this.searchSemanticInput = `#${id}`;
+      }
     },
     snapshotFromQuery(query) {
       const snapshot = {
@@ -1121,6 +1358,10 @@ export default {
           .replace(/[\u2010-\u2015\u2212]/g, "-");
 
       const where = this.whereFromBuilder();
+      if (this.searchSemanticInput.trim() && (!this.searchSemanticSelected || !this.searchSemanticSelected.id)) {
+        this.error = this.$t("search.semantic_tag_select_valid", "Select a typed tag from the list");
+        return null;
+      }
       if (this.form.dateOp === "between") {
         if (this.form.start && this.form.end) {
           const start = normalizeDate(this.form.start);
@@ -1202,8 +1443,14 @@ export default {
       if (this.form.mediaIds) {
         parts.push(`ids ${this.form.mediaIds}`);
       }
+      if (this.searchSemanticSelected && this.searchSemanticSelected.name) {
+        parts.push(`typed ${this.searchSemanticSelected.name}`);
+      }
       if (this.selectedFolder && this.selectedFolder.rel_path) {
-        parts.push(`in ${this.selectedFolder.rel_path}`);
+        const recursiveSuffix = this.form.folderRecursive
+          ? ` (${this.$t("search.folder_recursive", "Recursive").toLowerCase()})`
+          : "";
+        parts.push(`in ${this.selectedFolder.rel_path}${recursiveSuffix}`);
       }
       if (parts.length) {
         return parts.join(" · ");
@@ -1358,6 +1605,47 @@ export default {
       this.form.tags[this.activeTagIndex].value = tag;
       this.suggestions = [];
     },
+    onSearchSemanticInput() {
+      this.searchSemanticSelected = null;
+      if (this.searchSemanticSuggestTimer) {
+        clearTimeout(this.searchSemanticSuggestTimer);
+      }
+      const q = this.normalizeBatchTag(this.searchSemanticInput);
+      if (q.length < 2) {
+        this.searchSemanticSuggestions = [];
+        return;
+      }
+      this.searchSemanticSuggestTimer = setTimeout(async () => {
+        try {
+          const qs = new URLSearchParams();
+          qs.set("q", q);
+          qs.set("limit", "12");
+          const res = await fetch(`/api/semantic-tags/lookup?${qs.toString()}`);
+          if (this.handleAuthError(res)) {
+            return;
+          }
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            this.searchSemanticSuggestions = [];
+            return;
+          }
+          this.searchSemanticSuggestions = Array.isArray(data.items) ? data.items : [];
+        } catch (_e) {
+          this.searchSemanticSuggestions = [];
+        }
+      }, 200);
+    },
+    applySearchSemanticSuggestion(item) {
+      this.searchSemanticSelected = item;
+      this.searchSemanticInput = item.name || "";
+      this.searchSemanticSuggestions = [];
+    },
+    clearSearchSemanticTag() {
+      this.searchSemanticSelected = null;
+      this.searchSemanticInput = "";
+      this.searchSemanticSuggestions = [];
+      this.searchSemanticIncludeDescendants = false;
+    },
     parseMediaIds(raw) {
       if (typeof raw !== "string") {
         return [];
@@ -1486,8 +1774,8 @@ export default {
       if (!this.isAdmin) {
         return;
       }
-      if (this.selectedIds.length === 0) {
-        this.showToast(this.$t("search.batch_select_first", "Select media objects first"));
+      if (this.selectedIds.length === 0 && !(Number(this.total || 0) > 0)) {
+        this.showToast(this.$t("search.batch_select_or_search_first", "Select media objects or run a search first"));
         return;
       }
       this.batchTagOpen = true;
@@ -1499,9 +1787,14 @@ export default {
       this.batchTagCommonTags = [];
       this.batchTagRemoveTags = [];
       this.batchTagAddInput = "";
+      this.batchTagScope = this.selectedIds.length > 0 ? "selected" : "all_results";
       this.batchTagSuggestions = [];
       this.batchTagSummary = null;
       this.batchTagPreviewHidden = false;
+      if (this.selectedIds.length === 0) {
+        this.batchTagLoading = false;
+        return;
+      }
       try {
         const res = await fetch("/api/admin/media/tags/batch/preview", {
           method: "POST",
@@ -1536,9 +1829,11 @@ export default {
       this.batchTagCommonTags = [];
       this.batchTagRemoveTags = [];
       this.batchTagAddInput = "";
+      this.batchTagScope = "selected";
       this.batchTagSuggestions = [];
       this.batchTagSummary = null;
       this.batchTagPreviewHidden = false;
+      this.batchSemanticTagCreateOpen = false;
       if (this.batchTagSuggestTimer) {
         clearTimeout(this.batchTagSuggestTimer);
         this.batchTagSuggestTimer = null;
@@ -1558,6 +1853,197 @@ export default {
         return "";
       }
       return raw.trim().replace(/\s+/g, " ");
+    },
+    semanticTypeLabel(type) {
+      if (type === "person") return this.$t("semantic_tags.type_person", "Person");
+      if (type === "event") return this.$t("semantic_tags.type_event", "Event");
+      if (type === "category") return this.$t("semantic_tags.type_category", "Category");
+      return this.$t("semantic_tags.type_generic", "Generic");
+    },
+    openBatchSemanticTagCreate() {
+      if (!this.normalizeBatchTag(this.batchTagAddInput)) {
+        return;
+      }
+      this.batchSemanticTagCreateOpen = true;
+    },
+    onBatchSemanticTagCreated(item) {
+      this.batchSemanticTagCreateOpen = false;
+      const name = item && item.name ? String(item.name) : this.normalizeBatchTag(this.batchTagAddInput);
+      if (!name) {
+        return;
+      }
+      this.batchTagAddInput = name;
+      this.batchTagSuggestions = [];
+      this.showToast(this.$t("semantic_tags.created_and_assigned", "Typed tag created and added"));
+    },
+    openSemanticAssignModal() {
+      if (!this.isAdmin) {
+        return;
+      }
+      if (this.batchTagOpenDisabled) {
+        this.showToast(this.$t("semantic_tags.assign_select_or_search_first", "Select items or run a search first"));
+        return;
+      }
+      this.semanticAssignOpen = true;
+      this.semanticAssignLoading = false;
+      this.semanticAssignSubmitting = false;
+      this.semanticAssignError = "";
+      this.semanticAssignScope = this.selectedIds.length > 0 ? "selected" : "all_results";
+      this.semanticAssignInput = "";
+      this.semanticAssignSelected = null;
+      this.semanticAssignSuggestions = [];
+      this.semanticAssignItems = [];
+      this.semanticAssignCount = 0;
+      this.semanticAssignCreateOpen = false;
+      this.refreshSemanticAssignPreview();
+    },
+    closeSemanticAssignModal() {
+      this.semanticAssignOpen = false;
+      this.semanticAssignLoading = false;
+      this.semanticAssignSubmitting = false;
+      this.semanticAssignError = "";
+      this.semanticAssignInput = "";
+      this.semanticAssignSelected = null;
+      this.semanticAssignSuggestions = [];
+      this.semanticAssignItems = [];
+      this.semanticAssignCount = 0;
+      this.semanticAssignCreateOpen = false;
+      if (this.semanticAssignSuggestTimer) {
+        clearTimeout(this.semanticAssignSuggestTimer);
+        this.semanticAssignSuggestTimer = null;
+      }
+    },
+    openSemanticAssignCreate() {
+      if (!this.normalizeBatchTag(this.semanticAssignInput)) {
+        return;
+      }
+      this.semanticAssignCreateOpen = true;
+    },
+    onSemanticAssignCreated(item) {
+      this.semanticAssignCreateOpen = false;
+      if (!item || !item.id) {
+        return;
+      }
+      this.semanticAssignSelected = item;
+      this.semanticAssignInput = item.name || this.semanticAssignInput;
+      this.semanticAssignSuggestions = [];
+    },
+    onSemanticAssignInput() {
+      this.semanticAssignError = "";
+      this.semanticAssignSelected = null;
+      if (this.semanticAssignSuggestTimer) {
+        clearTimeout(this.semanticAssignSuggestTimer);
+      }
+      const q = this.normalizeBatchTag(this.semanticAssignInput);
+      if (q.length < 2) {
+        this.semanticAssignSuggestions = [];
+        return;
+      }
+      this.semanticAssignSuggestTimer = setTimeout(() => {
+        this.fetchSemanticAssignSuggestions(q);
+      }, 150);
+    },
+    async fetchSemanticAssignSuggestions(q) {
+      try {
+        const params = new URLSearchParams({ q, limit: "12" });
+        const res = await fetch(`/api/admin/semantic-tags/lookup?${params.toString()}`);
+        if (this.handleAuthError(res)) {
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.semanticAssignSuggestions = [];
+          return;
+        }
+        this.semanticAssignSuggestions = Array.isArray(data.items) ? data.items : [];
+      } catch (_e) {
+        this.semanticAssignSuggestions = [];
+      }
+    },
+    selectSemanticAssignSuggestion(item) {
+      this.semanticAssignSelected = item;
+      this.semanticAssignInput = item.name || "";
+      this.semanticAssignSuggestions = [];
+    },
+    async refreshSemanticAssignPreview() {
+      if (!this.semanticAssignOpen) {
+        return;
+      }
+      this.semanticAssignLoading = true;
+      this.semanticAssignError = "";
+      try {
+        const query = this.semanticAssignScope === "all_results" ? this.buildAllResultsQuery() : null;
+        const res = await fetch("/api/admin/semantic-tags/assign-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            apply_to: this.semanticAssignScope,
+            ids: this.semanticAssignScope === "selected" ? this.selectedIds : [],
+            search_query: query
+          })
+        });
+        if (this.handleAuthError(res)) {
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.semanticAssignError = apiErrorMessage(data.error, "semantic_tags.assign_load_failed", "Failed to resolve assignment scope");
+          return;
+        }
+        this.semanticAssignCount = Number(data.count || 0);
+        this.semanticAssignItems = Array.isArray(data.items) ? data.items : [];
+      } catch (_e) {
+        this.semanticAssignError = this.$t("semantic_tags.assign_load_failed", "Failed to resolve assignment scope");
+      } finally {
+        this.semanticAssignLoading = false;
+      }
+    },
+    async submitSemanticAssign() {
+      if (!this.semanticAssignSelected || !this.semanticAssignSelected.id) {
+        this.semanticAssignError = this.$t("semantic_tags.assign_select_tag_first", "Select or create a typed tag first");
+        return;
+      }
+      if (this.semanticAssignScope === "all_results") {
+        const confirmed = window.confirm(
+          this.$t(
+            "semantic_tags.assign_confirm_all_results",
+            { name: this.semanticAssignSelected.name, count: this.semanticAssignCount },
+            'Apply typed tag "{name}" to all {count} matching items?'
+          )
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
+      this.semanticAssignSubmitting = true;
+      this.semanticAssignError = "";
+      try {
+        const query = this.semanticAssignScope === "all_results" ? this.buildAllResultsQuery() : null;
+        const res = await fetch("/api/admin/semantic-tags/assign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            apply_to: this.semanticAssignScope,
+            ids: this.semanticAssignScope === "selected" ? this.selectedIds : [],
+            search_query: query,
+            semantic_tag_id: this.semanticAssignSelected.id
+          })
+        });
+        if (this.handleAuthError(res)) {
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.semanticAssignError = apiErrorMessage(data.error, "semantic_tags.assign_submit_failed", "Failed to assign typed tag");
+          return;
+        }
+        this.showToast(this.$t("semantic_tags.assign_done", { assigned: data.assigned_count || 0, skipped: data.skipped_count || 0 }, "Typed tag assigned to {assigned} items, skipped {skipped}."));
+        this.closeSemanticAssignModal();
+      } catch (_e) {
+        this.semanticAssignError = this.$t("semantic_tags.assign_submit_failed", "Failed to assign typed tag");
+      } finally {
+        this.semanticAssignSubmitting = false;
+      }
     },
     onBatchTagInput() {
       this.batchTagError = "";
@@ -1611,6 +2097,20 @@ export default {
       if (this.batchTagSubmitting || !this.batchTagHasChangeRequest || this.batchTagConflict) {
         return;
       }
+      const query = this.batchTagScope === "all_results" ? this.buildAllResultsQuery() : null;
+      if (this.batchTagScope === "all_results" && !query) {
+        this.batchTagError = this.$t("search.batch_submit_failed", "Failed to queue batch tag edit");
+        return;
+      }
+      if (this.batchTagScope === "all_results") {
+        const count = Number(this.total || 0);
+        const confirmed = window.confirm(
+          this.$t("search.batch_all_results_confirm", { count }, "Apply changes to all {count} matching items?")
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
       this.batchTagSubmitting = true;
       this.batchTagError = "";
       this.batchTagSummary = null;
@@ -1619,7 +2119,9 @@ export default {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ids: this.selectedIds,
+            apply_to: this.batchTagScope,
+            ids: this.batchTagScope === "selected" ? this.selectedIds : [],
+            search_query: query,
             remove_tags: this.batchTagRemoveTags,
             add_tag: this.normalizeBatchTag(this.batchTagAddInput) || null
           })
@@ -1702,6 +2204,17 @@ export default {
       } finally {
         this.loading = false;
       }
+    },
+    buildAllResultsQuery() {
+      const query = this.buildQuery();
+      if (!query) {
+        return null;
+      }
+      return {
+        ...query,
+        offset: 0,
+        limit: Math.max(1, Number(this.total || this.form.limit || 50))
+      };
     },
     nextPage() {
       if (this.page < this.totalPages) {
@@ -1950,6 +2463,7 @@ This is reversible from Admin -> Trash.`);
         ext: "",
         onlyFavorites: false,
         hasNotes: false,
+        folderRecursive: false,
         sortField: "path",
         sortDir: "asc",
         limit: pageSize
@@ -1958,6 +2472,7 @@ This is reversible from Admin -> Trash.`);
       this.pageInput = 1;
       this.activeTagIndex = null;
       this.suggestions = [];
+      this.clearSearchSemanticTag();
       this.error = "";
       this.savedBanner = "";
       this.loadedSearchId = null;
@@ -2309,6 +2824,9 @@ This is reversible from Admin -> Trash.`);
     batchTagConflict() {
       const addTag = this.normalizeBatchTag(this.batchTagAddInput);
       return addTag !== "" && this.batchTagRemoveTags.includes(addTag);
+    },
+    batchTagOpenDisabled() {
+      return this.selectedIds.length === 0 && !(Number(this.total || 0) > 0);
     }
   }
 };

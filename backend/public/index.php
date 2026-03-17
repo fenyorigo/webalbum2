@@ -45,6 +45,7 @@ use WebAlbum\Http\Controllers\ObjectCollabController;
 use WebAlbum\Http\Controllers\ObjectResolveController;
 use WebAlbum\Http\Controllers\I18nController;
 use WebAlbum\Http\Controllers\LocalizationAdminController;
+use WebAlbum\Http\Controllers\SemanticTagsController;
 
 $method = $_SERVER["REQUEST_METHOD"] ?? "GET";
 $uri = $_SERVER["REQUEST_URI"] ?? "/";
@@ -381,6 +382,46 @@ if ($method === "DELETE" && preg_match("#^/api/saved-searches/(\\d+)$#", $path, 
 }
 if ($method === "GET" && $path === "/api/tags/list") {
     (new TagsController($root . "/config/config.php"))->handleList();
+    exit;
+}
+if ($method === "GET" && $path === "/api/admin/semantic-tags") {
+    (new SemanticTagsController($root . "/config/config.php"))->list();
+    exit;
+}
+if ($method === "GET" && $path === "/api/admin/semantic-tags/lookup") {
+    (new SemanticTagsController($root . "/config/config.php"))->lookup();
+    exit;
+}
+if ($method === "GET" && $path === "/api/semantic-tags/lookup") {
+    (new SemanticTagsController($root . "/config/config.php"))->lookup();
+    exit;
+}
+if ($method === "GET" && preg_match("#^/api/semantic-tags/(\\d+)$#", $path, $m)) {
+    (new SemanticTagsController($root . "/config/config.php"))->get((int)$m[1]);
+    exit;
+}
+if ($method === "GET" && $path === "/api/semantic-tags/target") {
+    (new SemanticTagsController($root . "/config/config.php"))->target();
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/semantic-tags") {
+    (new SemanticTagsController($root . "/config/config.php"))->create();
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/semantic-tags/assign-preview") {
+    (new SemanticTagsController($root . "/config/config.php"))->assignPreview();
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/semantic-tags/assign") {
+    (new SemanticTagsController($root . "/config/config.php"))->assign();
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/semantic-tags/unassign") {
+    (new SemanticTagsController($root . "/config/config.php"))->unassign();
+    exit;
+}
+if ($method === "PUT" && preg_match("#^/api/admin/semantic-tags/(\\d+)$#", $path, $m)) {
+    (new SemanticTagsController($root . "/config/config.php"))->update((int)$m[1]);
     exit;
 }
 if ($method === "POST" && $path === "/api/tags/prefs") {
