@@ -3,7 +3,7 @@
     <nav class="top">
       <div class="brand">
         {{ $t("app.brand", "Family memories") }}
-        <span class="version">v3.0.0</span>
+        <span class="version">v3.0.1</span>
       </div>
       <div class="links" v-if="currentUser">
         <router-link to="/" class="link" active-class="active" exact-active-class="active">{{ $t("nav.search", "Search") }}</router-link>
@@ -11,6 +11,7 @@
         <router-link to="/typed-tags" class="link" active-class="active">{{ $t("nav.typed_tags", "Typed Tags") }}</router-link>
         <router-link to="/favorites" class="link" active-class="active">{{ $t("nav.favorites", "My Favorites") }}</router-link>
         <router-link to="/saved-searches" class="link" active-class="active">{{ $t("nav.saved_searches", "Saved searches") }}</router-link>
+        <router-link to="/help" class="link" active-class="active">{{ $t("nav.help", "Help") }}</router-link>
         <router-link to="/profile" class="link" active-class="active">{{ $t("nav.profile", "My Profile") }}</router-link>
         <router-link to="/my-proposals" class="link" active-class="active">{{ $t("nav.my_proposals", "My Proposals") }}</router-link>
         <router-link to="/my-notes" class="link" active-class="active">{{ $t("nav.my_notes", "My Notes") }}</router-link>

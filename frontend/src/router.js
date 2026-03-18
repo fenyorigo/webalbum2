@@ -7,6 +7,7 @@ import LoginPage from "./pages/LoginPage.vue";
 import SetupPage from "./pages/SetupPage.vue";
 import ProfilePage from "./pages/ProfilePage.vue";
 import TypedTagsPage from "./pages/TypedTagsPage.vue";
+import HelpPage from "./pages/HelpPage.vue";
 import MyProposalsPage from "./pages/MyProposalsPage.vue";
 import MyNotesPage from "./pages/MyNotesPage.vue";
 import TrashPage from "./pages/TrashPage.vue";
@@ -21,6 +22,7 @@ const routes = [
   { path: "/login", component: LoginPage },
   { path: "/setup", component: SetupPage },
   { path: "/", component: SearchPage },
+  { path: "/help", component: HelpPage },
   { path: "/tags", component: TagsPage },
   { path: "/typed-tags", component: TypedTagsPage },
   { path: "/favorites", component: FavoritesPage },

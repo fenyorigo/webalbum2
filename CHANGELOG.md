@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 3.0.1 - 2026-03-18
+
+- Added a localized Help page with main navigation entry and `/help` route.
+- Added localized help content seed/update SQL, including Hungarian translations and revised English defaults for existing installs.
+
 ## 3.0.0 - 2026-03-18
 
 - Finalized the WebAlbum 3.0 typed-tag foundation and released it as `3.0.0`.
