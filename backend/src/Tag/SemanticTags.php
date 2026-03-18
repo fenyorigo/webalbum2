@@ -133,7 +133,8 @@ final class SemanticTags
 
         $usageCounts = self::usageCounts($sqlite, $db);
         foreach ($rows as &$row) {
-            $row['usage_count'] = (int)($usageCounts[(int)($row['id'] ?? 0)] ?? 0);
+            $row['direct_usage_count'] = (int)($usageCounts[(int)($row['id'] ?? 0)] ?? 0);
+            $row['usage_count'] = (int)$row['direct_usage_count'];
             $row['usage_state'] = ((int)($row['usage_count'] ?? 0) > 0) ? 'used' : 'orphan';
         }
         unset($row);
@@ -145,6 +146,38 @@ final class SemanticTags
             'page_size' => $pageSize,
             'total_pages' => max(1, (int)ceil($total / $pageSize)),
         ];
+    }
+
+    public static function tree(Maria $db, SqliteIndex $sqlite): array
+    {
+        $rows = $db->query(
+            "SELECT st.id, st.name, st.normalized_name, st.tag_type, st.parent_tag_id, st.is_active,
+                    st.created_at, st.updated_at, st.created_by_user_id, st.updated_by_user_id,
+                    p.name AS parent_tag_name
+             FROM wa_semantic_tags st
+             LEFT JOIN wa_semantic_tags p ON p.id = st.parent_tag_id
+             ORDER BY st.name ASC"
+        );
+        $usageCounts = self::usageCounts($sqlite, $db);
+        $childrenRows = $db->query(
+            "SELECT parent_tag_id, COUNT(*) AS child_count
+             FROM wa_semantic_tags
+             WHERE parent_tag_id IS NOT NULL
+             GROUP BY parent_tag_id"
+        );
+        $childCounts = [];
+        foreach ($childrenRows as $row) {
+            $childCounts[(int)($row['parent_tag_id'] ?? 0)] = (int)($row['child_count'] ?? 0);
+        }
+        foreach ($rows as &$row) {
+            $id = (int)($row['id'] ?? 0);
+            $row['direct_usage_count'] = (int)($usageCounts[$id] ?? 0);
+            $row['usage_count'] = (int)$row['direct_usage_count'];
+            $row['usage_state'] = ((int)($row['usage_count'] ?? 0) > 0) ? 'used' : 'orphan';
+            $row['child_count'] = (int)($childCounts[$id] ?? 0);
+        }
+        unset($row);
+        return $rows;
     }
 
     public static function lookup(Maria $db, string $q, int $limit = 20): array
@@ -386,6 +419,37 @@ final class SemanticTags
             return strcasecmp((string)$a['name'], (string)$b['name']);
         });
         return array_values($items);
+    }
+
+    public static function deleteTag(Maria $db, SqliteIndex $sqlite, int $id): array
+    {
+        $rows = $db->query(
+            "SELECT st.id, st.name, st.normalized_name, st.tag_type, st.parent_tag_id, st.is_active,
+                    p.name AS parent_tag_name
+             FROM wa_semantic_tags st
+             LEFT JOIN wa_semantic_tags p ON p.id = st.parent_tag_id
+             WHERE st.id = ? LIMIT 1",
+            [$id]
+        );
+        if ($rows === []) {
+            throw new \RuntimeException('Semantic tag not found', 404);
+        }
+        $item = $rows[0];
+
+        $children = $db->query(
+            'SELECT id, name FROM wa_semantic_tags WHERE parent_tag_id = ? ORDER BY name ASC LIMIT 25',
+            [$id]
+        );
+        if ($children !== []) {
+            throw new \RuntimeException('Cannot delete tag with children', 409);
+        }
+
+        $usageCounts = self::usageCounts($sqlite, $db);
+        $item['usage_count'] = (int)($usageCounts[$id] ?? 0);
+        $item['usage_state'] = ((int)$item['usage_count'] > 0) ? 'used' : 'orphan';
+
+        $db->exec('DELETE FROM wa_semantic_tags WHERE id = ?', [$id]);
+        return $item;
     }
 
     private static function usageCounts(SqliteIndex $sqlite, Maria $db): array

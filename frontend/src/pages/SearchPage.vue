@@ -205,6 +205,19 @@
     </section>
 
     <section class="results">
+      <div v-if="activeFilterChips.length" class="filter-chip-bar">
+        <button
+          v-for="chip in activeFilterChips"
+          :key="chip.key"
+          type="button"
+          class="filter-chip"
+          :title="$t('search.filter.remove', 'Remove filter')"
+          @click="removeFilterChip(chip)"
+        >
+          <span class="chip-label">{{ chip.label }}: {{ chip.value }}</span>
+          <span class="chip-close">×</span>
+        </button>
+      </div>
       <div class="meta">
         <span v-if="loading">{{ $t("common.loading", "Loading...") }}</span>
         <span v-else-if="total === null">{{ $t("search.results_empty", "Results: —") }}</span>
@@ -935,21 +948,55 @@ export default {
       this.viewMode = window.matchMedia("(min-width: 1024px)").matches ? "grid" : "list";
     }
     this.currentUser = window.__wa_current_user || null;
-    this.restoreFolderFilter();
+    const hasRouteDrivenSearch = !!(this.$route?.query?.load || this.$route?.query?.semantic_tag);
+    this.restoreSearchStateForCurrentUser(!hasRouteDrivenSearch);
     this.applyLoadFromRoute();
     window.addEventListener("wa-auth-changed", this.onUserChanged);
+    window.addEventListener("wa-semantic-tag-updated", this.onSemanticTagUpdated);
     window.addEventListener("wa-prefs-changed", this.onPrefsChanged);
     window.addEventListener("wa-media-thumb-refresh", this.onMediaThumbRefresh);
   },
   beforeUnmount() {
     this.clearSlideshowTimer();
+    this.persistSearchStateForUser(this.currentUser);
     window.removeEventListener("wa-auth-changed", this.onUserChanged);
+    window.removeEventListener("wa-semantic-tag-updated", this.onSemanticTagUpdated);
     window.removeEventListener("wa-prefs-changed", this.onPrefsChanged);
     window.removeEventListener("wa-media-thumb-refresh", this.onMediaThumbRefresh);
   },
   methods: {
     onUserChanged(event) {
-      this.currentUser = event.detail || null;
+      const nextUser = event.detail || null;
+      const prevUser = this.currentUser || null;
+      if (prevUser && (!nextUser || Number(nextUser.id || 0) !== Number(prevUser.id || 0))) {
+        this.persistSearchStateForUser(prevUser);
+      }
+      this.currentUser = nextUser;
+      if (nextUser) {
+        this.restoreSearchStateForCurrentUser(true);
+      } else {
+        this.resetSearchState();
+      }
+    },
+    onSemanticTagUpdated(event) {
+      const item = event && event.detail ? event.detail : null;
+      const id = Number(item && item.id ? item.id : 0);
+      const name = typeof item?.name === "string" ? item.name.trim() : "";
+      if (!id || !name) {
+        return;
+      }
+      const currentId = Number(this.searchSemanticSelected && this.searchSemanticSelected.id ? this.searchSemanticSelected.id : 0);
+      if (currentId !== id) {
+        return;
+      }
+      this.searchSemanticSelected = {
+        ...this.searchSemanticSelected,
+        id,
+        name
+      };
+      this.searchSemanticInput = name;
+      this.persistSearchState();
+      this.runSearch(true);
     },
     updateSlideshowSeconds(value) {
       const parsed = Number(value);
@@ -1076,10 +1123,32 @@ export default {
     applyLoadFromRoute() {
       const loadId = this.$route?.query?.load;
       if (!loadId) {
+        this.applySemanticTagRoute();
         return;
       }
       const autoRun = this.$route?.query?.run === "1";
       this.fetchSavedSearch(loadId, autoRun);
+    },
+    async applySemanticTagRoute() {
+      const id = Number(this.$route?.query?.semantic_tag || 0);
+      if (!id) {
+        return;
+      }
+      const includeDescendants = this.$route?.query?.semantic_tag_descendants !== "0";
+      const name = typeof this.$route?.query?.semantic_tag_name === "string"
+        ? this.$route.query.semantic_tag_name
+        : `#${id}`;
+      this.searchSemanticSelected = { id, name };
+      this.searchSemanticInput = name;
+      this.searchSemanticIncludeDescendants = includeDescendants;
+      await this.syncSearchSemanticFromWhere({
+        items: [{ field: "semantic_tag", op: "is", value: id }],
+        semantic_tag_descendants: includeDescendants
+      });
+      this.page = 1;
+      if (this.$route?.query?.run === "1") {
+        this.runSearch(true);
+      }
     },
     async fetchSavedSearch(id, autoRun) {
       try {
@@ -1117,7 +1186,7 @@ export default {
       this.loadedQuery = JSON.parse(JSON.stringify(query));
       this.loadedSnapshot = this.snapshotFromQuery(this.loadedQuery);
       this.syncSearchSemanticFromWhere((query.where && typeof query.where === "object") ? query.where : {});
-      this.persistFolderFilter();
+      this.persistSearchState();
       this.savedBanner = name ? `${this.$t("search.loaded_from_saved", "Loaded from saved search")}: ${name}` : "";
       if (options.autoRun) {
         this.$nextTick(() => {
@@ -1510,45 +1579,141 @@ export default {
         rel_path: folder.rel_path,
         name: folder.name || folder.rel_path
       };
-      this.persistFolderFilter();
+      this.persistSearchState();
       this.page = 1;
       this.runSearch();
     },
     clearFolderFilter() {
       this.selectedFolder = null;
-      this.persistFolderFilter();
+      this.persistSearchState();
       this.page = 1;
       this.runSearch();
     },
-    persistFolderFilter() {
+    searchStateStorageKey(user = this.currentUser) {
+      const id = Number(user && user.id ? user.id : 0);
+      return id > 0 ? `wa_search_state:${id}` : "";
+    },
+    buildPersistedSearchState() {
+      return {
+        form: JSON.parse(JSON.stringify(this.form)),
+        selectedFolder: this.selectedFolder ? { ...this.selectedFolder } : null,
+        searchSemanticSelected: this.searchSemanticSelected ? { ...this.searchSemanticSelected } : null,
+        searchSemanticInput: this.searchSemanticInput || "",
+        searchSemanticIncludeDescendants: !!this.searchSemanticIncludeDescendants,
+        page: this.page || 1,
+        viewMode: this.viewMode || "list",
+        loadedSearchId: this.loadedSearchId || null,
+        loadedSearchName: this.loadedSearchName || "",
+        loadedQuery: this.loadedQuery ? JSON.parse(JSON.stringify(this.loadedQuery)) : null,
+        loadedSnapshot: this.loadedSnapshot || "",
+        savedBanner: this.savedBanner || ""
+      };
+    },
+    persistSearchStateForUser(user = this.currentUser) {
       try {
-        if (this.selectedFolder && this.selectedFolder.rel_path) {
-          window.localStorage.setItem("wa_folder_filter", JSON.stringify(this.selectedFolder));
-        } else {
-          window.localStorage.removeItem("wa_folder_filter");
+        const key = this.searchStateStorageKey(user);
+        if (!key) {
+          return;
         }
+        window.localStorage.setItem(key, JSON.stringify(this.buildPersistedSearchState()));
       } catch (_err) {
         // ignore storage errors
       }
     },
-    restoreFolderFilter() {
+    persistSearchState() {
+      this.persistSearchStateForUser(this.currentUser);
+    },
+    restoreSearchStateForCurrentUser(autoRun = true) {
       try {
-        const raw = window.localStorage.getItem("wa_folder_filter");
+        const key = this.searchStateStorageKey(this.currentUser);
+        if (!key) {
+          return;
+        }
+        const raw = window.localStorage.getItem(key);
         if (!raw) {
           return;
         }
         const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed.rel_path !== "string" || parsed.rel_path.trim() === "") {
+        if (!parsed || typeof parsed !== "object") {
           return;
         }
-        this.selectedFolder = {
-          id: Number.isInteger(parsed.id) ? parsed.id : null,
-          rel_path: parsed.rel_path.trim(),
-          name: parsed.name || parsed.rel_path.split("/").filter(Boolean).pop() || parsed.rel_path
-        };
+        this.suspendAuto = true;
+        if (parsed.form && typeof parsed.form === "object") {
+          this.form = {
+            ...this.form,
+            ...parsed.form,
+            tags: Array.isArray(parsed.form.tags) && parsed.form.tags.length
+              ? parsed.form.tags
+              : [{ value: "", mode: "include" }]
+          };
+        }
+        this.selectedFolder = parsed.selectedFolder && typeof parsed.selectedFolder.rel_path === "string"
+          ? {
+              id: Number.isInteger(parsed.selectedFolder.id) ? parsed.selectedFolder.id : null,
+              rel_path: parsed.selectedFolder.rel_path.trim(),
+              name: parsed.selectedFolder.name || parsed.selectedFolder.rel_path.split("/").filter(Boolean).pop() || parsed.selectedFolder.rel_path
+            }
+          : null;
+        this.searchSemanticSelected = parsed.searchSemanticSelected && parsed.searchSemanticSelected.id
+          ? { ...parsed.searchSemanticSelected }
+          : null;
+        this.searchSemanticInput = typeof parsed.searchSemanticInput === "string"
+          ? parsed.searchSemanticInput
+          : (this.searchSemanticSelected ? this.searchSemanticSelected.name || "" : "");
+        this.searchSemanticIncludeDescendants = !!parsed.searchSemanticIncludeDescendants;
+        this.page = Math.max(1, Number(parsed.page || 1));
+        this.pageInput = this.page;
+        if (parsed.viewMode === "list" || parsed.viewMode === "grid") {
+          this.viewMode = parsed.viewMode;
+        }
+        this.loadedSearchId = parsed.loadedSearchId || null;
+        this.loadedSearchName = parsed.loadedSearchName || "";
+        this.loadedQuery = parsed.loadedQuery || null;
+        this.loadedSnapshot = parsed.loadedSnapshot || "";
+        this.savedBanner = parsed.savedBanner || "";
+        this.suspendAuto = false;
+        if (autoRun) {
+          this.runSearch();
+        }
       } catch (_err) {
         // ignore storage errors
       }
+    },
+    resetSearchState() {
+      const prefs = window.__wa_prefs || null;
+      const pageSize = prefs && prefs.page_size ? prefs.page_size : 50;
+      this.suspendAuto = true;
+      this.form = {
+        tags: [{ value: "", mode: "include" }],
+        tagMode: "ALL",
+        path: "",
+        mediaIds: "",
+        dateOp: "after",
+        date: "",
+        start: "",
+        end: "",
+        type: "",
+        ext: "",
+        onlyFavorites: false,
+        hasNotes: false,
+        folderRecursive: false,
+        sortField: "path",
+        sortDir: "asc",
+        limit: pageSize
+      };
+      this.page = 1;
+      this.pageInput = 1;
+      this.activeTagIndex = null;
+      this.suggestions = [];
+      this.clearSearchSemanticTag();
+      this.error = "";
+      this.savedBanner = "";
+      this.loadedSearchId = null;
+      this.loadedSearchName = "";
+      this.loadedQuery = null;
+      this.loadedSnapshot = "";
+      this.selectedFolder = null;
+      this.suspendAuto = false;
     },
     addTagRow() {
       this.form.tags.push({ value: "", mode: "include" });
@@ -1645,6 +1810,65 @@ export default {
       this.searchSemanticInput = "";
       this.searchSemanticSuggestions = [];
       this.searchSemanticIncludeDescendants = false;
+    },
+    typeLabel(type) {
+      if (type === "image") return this.$t("search.type.photos", "Photos");
+      if (type === "video") return this.$t("search.type.videos", "Videos");
+      if (type === "audio") return this.$t("search.type.audio", "Audio");
+      if (type === "doc") return this.$t("search.type.documents", "Documents");
+      return type || "";
+    },
+    removeFilterChip(chip) {
+      if (!chip || !chip.kind) {
+        return;
+      }
+      switch (chip.kind) {
+        case "semantic_tag":
+          this.clearSearchSemanticTag();
+          break;
+        case "tag":
+        case "tag_exclude":
+          if (Number.isInteger(chip.index) && this.form.tags[chip.index]) {
+            this.form.tags[chip.index].value = "";
+            this.form.tags[chip.index].mode = "include";
+          }
+          break;
+        case "folder":
+          this.selectedFolder = null;
+          this.form.folderRecursive = false;
+          break;
+        case "path":
+          this.form.path = "";
+          break;
+        case "type":
+          this.form.type = "";
+          break;
+        case "ext":
+          this.form.ext = "";
+          break;
+        case "favorites":
+          this.form.onlyFavorites = false;
+          break;
+        case "has_notes":
+          this.form.hasNotes = false;
+          break;
+        case "media_ids":
+          this.form.mediaIds = "";
+          break;
+        case "taken_between":
+          this.form.start = "";
+          this.form.end = "";
+          break;
+        case "taken_after":
+        case "taken_before":
+          this.form.date = "";
+          break;
+        default:
+          return;
+      }
+      this.page = 1;
+      this.persistSearchState();
+      this.runSearch();
     },
     parseMediaIds(raw) {
       if (typeof raw !== "string") {
@@ -2190,6 +2414,7 @@ export default {
           this.total = 0;
           this.pageInput = this.page;
         }
+        this.persistSearchState();
         this.selectedIds = [];
         this.viewerOpen = false;
         this.videoViewerOpen = false;
@@ -2447,41 +2672,8 @@ This is reversible from Admin -> Trash.`);
       this.selectedIds = [];
     },
     clearCriteria() {
-      const prefs = window.__wa_prefs || null;
-      const pageSize = prefs && prefs.page_size ? prefs.page_size : 50;
-      this.suspendAuto = true;
-      this.form = {
-        tags: [{ value: "", mode: "include" }],
-        tagMode: "ALL",
-        path: "",
-        mediaIds: "",
-        dateOp: "after",
-        date: "",
-        start: "",
-        end: "",
-        type: "",
-        ext: "",
-        onlyFavorites: false,
-        hasNotes: false,
-        folderRecursive: false,
-        sortField: "path",
-        sortDir: "asc",
-        limit: pageSize
-      };
-      this.page = 1;
-      this.pageInput = 1;
-      this.activeTagIndex = null;
-      this.suggestions = [];
-      this.clearSearchSemanticTag();
-      this.error = "";
-      this.savedBanner = "";
-      this.loadedSearchId = null;
-      this.loadedSearchName = "";
-      this.loadedQuery = null;
-      this.loadedSnapshot = "";
-      this.selectedFolder = null;
-      this.persistFolderFilter();
-      this.suspendAuto = false;
+      this.resetSearchState();
+      this.persistSearchState();
       this.runSearch();
     },
     openViewer(id) {
@@ -2710,6 +2902,16 @@ This is reversible from Admin -> Trash.`);
     "$route.query.load"() {
       this.applyLoadFromRoute();
     },
+    "$route.query.semantic_tag"() {
+      if (!this.$route?.query?.load) {
+        this.applySemanticTagRoute();
+      }
+    },
+    "$route.query.semantic_tag_descendants"() {
+      if (!this.$route?.query?.load) {
+        this.applySemanticTagRoute();
+      }
+    },
     "form.type"() {
       if (this.suspendAuto) {
         return;
@@ -2773,6 +2975,71 @@ This is reversible from Admin -> Trash.`);
     viewMode() {}
   },
   computed: {
+    activeFilterChips() {
+      const chips = [];
+      const pushChip = (key, kind, label, value, extra = {}) => {
+        if (value === null || value === undefined || value === "") {
+          return;
+        }
+        chips.push({ key, kind, label, value, ...extra });
+      };
+
+      if (this.searchSemanticSelected && this.searchSemanticSelected.name) {
+        let label = this.$t("search.filter.typed_generic", "Typed tag");
+        const type = String(this.searchSemanticSelected.tag_type || "");
+        if (type === "event") label = this.$t("search.filter.typed_event", "Event");
+        else if (type === "category") label = this.$t("search.filter.typed_category", "Category");
+        else if (type === "person") label = this.$t("search.filter.typed_person", "Person");
+        pushChip("semantic_tag", "semantic_tag", label, this.searchSemanticSelected.name);
+      }
+
+      this.form.tags.forEach((tag, idx) => {
+        const value = String(tag && tag.value ? tag.value : "").trim();
+        if (!value) {
+          return;
+        }
+        pushChip(
+          `tag:${idx}:${tag.mode}`,
+          tag.mode === "exclude" ? "tag_exclude" : "tag",
+          tag.mode === "exclude"
+            ? this.$t("search.filter.tag_exclude", "Exclude tag")
+            : this.$t("search.filter.tag", "Tag"),
+          value,
+          { index: idx }
+        );
+      });
+
+      if (this.selectedFolder && this.selectedFolder.rel_path) {
+        const suffix = this.form.folderRecursive ? ` (${this.$t("search.folder_recursive", "Recursive").toLowerCase()})` : "";
+        pushChip("folder", "folder", this.$t("search.filter.folder", "Folder"), `${this.selectedFolder.rel_path}${suffix}`);
+      }
+      if (this.form.path) {
+        pushChip("path", "path", this.$t("search.filter.path", "Path"), this.form.path);
+      }
+      if (this.form.type) {
+        pushChip("type", "type", this.$t("search.filter.type", "Type"), this.typeLabel(this.form.type));
+      }
+      if (this.form.ext) {
+        pushChip("ext", "ext", this.$t("search.filter.extension", "Extension"), String(this.form.ext).toUpperCase());
+      }
+      if (this.form.onlyFavorites) {
+        pushChip("favorites", "favorites", this.$t("search.filter.favorites", "Favorites"), this.$t("search.filter.enabled", "On"));
+      }
+      if (this.form.hasNotes) {
+        pushChip("has_notes", "has_notes", this.$t("search.filter.has_notes", "Has notes"), this.$t("search.filter.enabled", "On"));
+      }
+      if (this.form.mediaIds) {
+        pushChip("media_ids", "media_ids", this.$t("search.filter.media_ids", "Media IDs"), this.form.mediaIds);
+      }
+      if (this.form.dateOp === "between" && this.form.start && this.form.end) {
+        pushChip("taken_between", "taken_between", this.$t("search.filter.taken_between", "Taken"), `${this.form.start} - ${this.form.end}`);
+      } else if (this.form.dateOp === "after" && this.form.date) {
+        pushChip("taken_after", "taken_after", this.$t("search.filter.taken_after", "Taken after"), this.form.date);
+      } else if (this.form.dateOp === "before" && this.form.date) {
+        pushChip("taken_before", "taken_before", this.$t("search.filter.taken_before", "Taken before"), this.form.date);
+      }
+      return chips;
+    },
     assetViewerIndex() {
       if (!this.assetViewerRow) {
         return -1;
@@ -2839,6 +3106,33 @@ This is reversible from Admin -> Trash.`);
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
+}
+.filter-chip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 0.9rem;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+.chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-close {
+  font-size: 1rem;
+  line-height: 1;
 }
 .folders-sidebar {
   position: sticky;

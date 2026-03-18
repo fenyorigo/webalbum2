@@ -43,6 +43,43 @@ final class SemanticTagsController
         }
     }
 
+    public function tree(): void
+    {
+        try {
+            [$config, $db] = $this->requireAdmin();
+            $sqlite = new SqliteIndex((string)($config['sqlite']['path'] ?? ''));
+            $this->json([
+                'items' => SemanticTags::tree($db, $sqlite),
+                'tag_types' => SemanticTags::TYPES,
+                'is_admin' => true,
+            ]);
+        } catch (\RuntimeException $e) {
+            $this->json(['error' => $e->getMessage()], $this->httpStatus($e->getCode(), 400));
+        } catch (\Throwable $e) {
+            $this->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function browseTree(): void
+    {
+        try {
+            [$config, $db] = $this->requireAuthenticated();
+            $sqlite = new SqliteIndex((string)($config['sqlite']['path'] ?? ''));
+            $items = array_values(array_filter(
+                SemanticTags::tree($db, $sqlite),
+                static fn (array $row): bool => (string)($row['tag_type'] ?? '') !== 'person'
+            ));
+            $this->json([
+                'items' => $items,
+                'tag_types' => array_values(array_filter(SemanticTags::TYPES, static fn (string $type): bool => $type !== 'person')),
+            ]);
+        } catch (\RuntimeException $e) {
+            $this->json(['error' => $e->getMessage()], $this->httpStatus($e->getCode(), 400));
+        } catch (\Throwable $e) {
+            $this->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
     public function lookup(): void
     {
         try {
@@ -127,6 +164,29 @@ final class SemanticTagsController
             $this->json(['ok' => true, 'item' => $row]);
         } catch (\JsonException $e) {
             $this->json(['error' => 'Invalid JSON'], 400);
+        } catch (\RuntimeException $e) {
+            $this->json(['error' => $e->getMessage()], $this->httpStatus($e->getCode(), 400));
+        } catch (\Throwable $e) {
+            $this->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function delete(int $id): void
+    {
+        try {
+            if ($id < 1) {
+                throw new \RuntimeException('Semantic tag not found', 404);
+            }
+            [$config, $db, $admin] = $this->requireAdmin();
+            $sqlite = new SqliteIndex((string)($config['sqlite']['path'] ?? ''));
+            $item = SemanticTags::deleteTag($db, $sqlite, $id);
+            $this->logAudit($db, (int)$admin['id'], 'semantic_tag_delete', [
+                'semantic_tag_id' => (int)$item['id'],
+                'name' => (string)$item['name'],
+                'tag_type' => (string)$item['tag_type'],
+                'usage_count' => (int)($item['usage_count'] ?? 0),
+            ]);
+            $this->json(['ok' => true, 'item' => $item]);
         } catch (\RuntimeException $e) {
             $this->json(['error' => $e->getMessage()], $this->httpStatus($e->getCode(), 400));
         } catch (\Throwable $e) {

@@ -65,11 +65,56 @@ function emptyForm() {
   };
 }
 
+function syncPersistedSemanticTagNames(item) {
+  const id = Number(item && item.id ? item.id : 0);
+  const name = typeof item?.name === "string" ? item.name.trim() : "";
+  if (!id || !name || typeof window === "undefined" || !window.localStorage) {
+    return;
+  }
+  try {
+    const prefix = "wa_search_state:";
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(prefix)) {
+        continue;
+      }
+      const raw = window.localStorage.getItem(key);
+      if (!raw) {
+        continue;
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (_e) {
+        continue;
+      }
+      if (!parsed || typeof parsed !== "object") {
+        continue;
+      }
+      const currentId = Number(parsed.searchSemanticSelected && parsed.searchSemanticSelected.id ? parsed.searchSemanticSelected.id : 0);
+      if (currentId !== id) {
+        continue;
+      }
+      parsed.searchSemanticSelected = {
+        ...(parsed.searchSemanticSelected || {}),
+        id,
+        name
+      };
+      parsed.searchSemanticInput = name;
+      window.localStorage.setItem(key, JSON.stringify(parsed));
+    }
+  } catch (_e) {
+    // ignore storage errors
+  }
+}
+
 export default {
   name: "SemanticTagCreateModal",
   props: {
     isOpen: { type: Boolean, required: true },
     initialName: { type: String, default: "" },
+    initialParentId: { type: [Number, String, null], default: null },
+    initialParentName: { type: String, default: "" },
     editItem: { type: Object, default: null }
   },
   emits: ["close", "created"],
@@ -102,6 +147,16 @@ export default {
         }
       },
       deep: true
+    },
+    initialParentId() {
+      if (this.isOpen && !this.editMode) {
+        this.reset();
+      }
+    },
+    initialParentName() {
+      if (this.isOpen && !this.editMode) {
+        this.reset();
+      }
     }
   },
   computed: {
@@ -138,8 +193,18 @@ export default {
       }
       this.form = emptyForm();
       this.form.name = this.initialName || "";
-      this.selectedParent = null;
-      this.parentInput = "";
+      const parentId = this.initialParentId !== null && this.initialParentId !== ""
+        ? Number(this.initialParentId)
+        : null;
+      this.form.parent_tag_id = parentId || null;
+      this.selectedParent = parentId
+        ? {
+            id: parentId,
+            name: this.initialParentName || "",
+            tag_type: ""
+          }
+        : null;
+      this.parentInput = this.initialParentName || "";
     },
     displayType(type) {
       if (type === "person") return this.$t("semantic_tags.type_person", "Person");
@@ -223,6 +288,8 @@ export default {
           );
           return;
         }
+        syncPersistedSemanticTagNames(data.item || null);
+        window.dispatchEvent(new CustomEvent("wa-semantic-tag-updated", { detail: data.item || null }));
         this.$emit("created", data.item || null);
       } catch (_e) {
         this.error = this.$t(

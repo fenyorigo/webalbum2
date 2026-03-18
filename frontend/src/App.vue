@@ -3,11 +3,12 @@
     <nav class="top">
       <div class="brand">
         {{ $t("app.brand", "Family memories") }}
-        <span class="version">v3.0.0b</span>
+        <span class="version">v3.0.0</span>
       </div>
       <div class="links" v-if="currentUser">
         <router-link to="/" class="link" active-class="active" exact-active-class="active">{{ $t("nav.search", "Search") }}</router-link>
         <router-link to="/tags" class="link" active-class="active">{{ $t("nav.tags", "Tags") }}</router-link>
+        <router-link to="/typed-tags" class="link" active-class="active">{{ $t("nav.typed_tags", "Typed Tags") }}</router-link>
         <router-link to="/favorites" class="link" active-class="active">{{ $t("nav.favorites", "My Favorites") }}</router-link>
         <router-link to="/saved-searches" class="link" active-class="active">{{ $t("nav.saved_searches", "Saved searches") }}</router-link>
         <router-link to="/profile" class="link" active-class="active">{{ $t("nav.profile", "My Profile") }}</router-link>
@@ -27,6 +28,8 @@
             <button type="button" @click="openTrash">{{ $t("admin.trash", "Trash") }}</button>
             <button type="button" @click="openAssetsPage">{{ $t("admin.assets", "Assets") }}</button>
             <button type="button" @click="openObjectProposals">{{ $t("admin.object_proposals", "Object proposals") }}</button>
+            <button type="button" @click="openTagTreeAdmin">{{ $t("admin.tag_tree", "Tag Tree") }}</button>
+            <button type="button" @click="openTagCleanupAdmin">{{ $t("admin.cleanup_tags", "Cleanup Tags") }}</button>
             <button type="button" @click="openLocalizationAdmin">{{ $t("admin.localization", "Localization") }}</button>
             <button type="button" @click="scanAssets">{{ $t("admin.scan_documents_audio", "Scan documents and audio") }}</button>
             <button type="button" @click="openJobStatus">{{ $t("admin.job_status", "Job status") }}</button>
@@ -1073,6 +1076,14 @@ export default {
     openLocalizationAdmin() {
       this.adminOpen = false;
       this.$router.push("/admin/localization");
+    },
+    openTagTreeAdmin() {
+      this.adminOpen = false;
+      this.$router.push("/admin/tag-tree");
+    },
+    openTagCleanupAdmin() {
+      this.adminOpen = false;
+      this.$router.push("/admin/tag-cleanup");
     },
     scanAssets() {
       this.adminOpen = false;

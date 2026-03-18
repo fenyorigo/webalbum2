@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 3.0.0 - 2026-03-18
+
+- Finalized the WebAlbum 3.0 typed-tag foundation and released it as `3.0.0`.
+- Added semantic tag management with type + parent hierarchy and manual media-tag relations for all supported media object types.
+- Added typed-tag search, descendant-aware parent search, and user-facing typed tag browsing.
+- Added admin Tag Tree and Cleanup Tags maintenance views.
+- Added search-context filter chips with click-to-remove behavior and automatic refresh.
+- Improved search-state persistence so browser-side last search is isolated per user.
+- Improved typed-tag rename propagation so active/persisted typed-tag search criteria stay consistent after rename.
+
 ## 3.0.0b - 2026-03-17
 
 - Added the typed-tag foundation for WebAlbum 3.0.

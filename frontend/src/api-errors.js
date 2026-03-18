@@ -44,6 +44,7 @@ const API_ERROR_KEYS = {
   "Parent tag not found": "api.parent_tag_not_found",
   "Parent tag cannot equal tag": "api.parent_tag_self",
   "Semantic tag not found": "api.semantic_tag_not_found",
+  "Cannot delete tag with children": "api.cannot_delete_tag_with_children",
   "search_query is required for all_results": "api.search_query_required_for_all_results",
   "No matching media found": "api.no_matching_media_found",
   "Cannot favorite trashed media": "api.favorite_trashed_forbidden",

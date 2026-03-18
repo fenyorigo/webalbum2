@@ -6,6 +6,7 @@ import SavedSearchesPage from "./pages/SavedSearchesPage.vue";
 import LoginPage from "./pages/LoginPage.vue";
 import SetupPage from "./pages/SetupPage.vue";
 import ProfilePage from "./pages/ProfilePage.vue";
+import TypedTagsPage from "./pages/TypedTagsPage.vue";
 import MyProposalsPage from "./pages/MyProposalsPage.vue";
 import MyNotesPage from "./pages/MyNotesPage.vue";
 import TrashPage from "./pages/TrashPage.vue";
@@ -13,12 +14,15 @@ import AssetsPage from "./pages/AssetsPage.vue";
 import ObjectPage from "./pages/ObjectPage.vue";
 import ObjectProposalsAdminPage from "./pages/ObjectProposalsAdminPage.vue";
 import LocalizationAdminPage from "./pages/LocalizationAdminPage.vue";
+import TagTreeAdminPage from "./pages/TagTreeAdminPage.vue";
+import TagCleanupAdminPage from "./pages/TagCleanupAdminPage.vue";
 
 const routes = [
   { path: "/login", component: LoginPage },
   { path: "/setup", component: SetupPage },
   { path: "/", component: SearchPage },
   { path: "/tags", component: TagsPage },
+  { path: "/typed-tags", component: TypedTagsPage },
   { path: "/favorites", component: FavoritesPage },
   { path: "/saved-searches", component: SavedSearchesPage },
   { path: "/profile", component: ProfilePage },
@@ -28,7 +32,9 @@ const routes = [
   { path: "/assets", component: AssetsPage },
   { path: "/object", component: ObjectPage },
   { path: "/admin/object-proposals", component: ObjectProposalsAdminPage },
-  { path: "/admin/localization", component: LocalizationAdminPage }
+  { path: "/admin/localization", component: LocalizationAdminPage },
+  { path: "/admin/tag-tree", component: TagTreeAdminPage },
+  { path: "/admin/tag-cleanup", component: TagCleanupAdminPage }
 ];
 
 const router = createRouter({
@@ -80,7 +86,7 @@ router.beforeEach(async (to) => {
     }
     return "/login";
   }
-  if ((to.path === "/trash" || to.path === "/assets" || to.path === "/admin/object-proposals" || to.path === "/admin/localization") && !user.is_admin) {
+  if ((to.path === "/trash" || to.path === "/assets" || to.path === "/admin/object-proposals" || to.path === "/admin/localization" || to.path === "/admin/tag-tree" || to.path === "/admin/tag-cleanup") && !user.is_admin) {
     return "/";
   }
   return true;

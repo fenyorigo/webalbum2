@@ -388,12 +388,20 @@ if ($method === "GET" && $path === "/api/admin/semantic-tags") {
     (new SemanticTagsController($root . "/config/config.php"))->list();
     exit;
 }
+if ($method === "GET" && $path === "/api/admin/semantic-tags/tree") {
+    (new SemanticTagsController($root . "/config/config.php"))->tree();
+    exit;
+}
 if ($method === "GET" && $path === "/api/admin/semantic-tags/lookup") {
     (new SemanticTagsController($root . "/config/config.php"))->lookup();
     exit;
 }
 if ($method === "GET" && $path === "/api/semantic-tags/lookup") {
     (new SemanticTagsController($root . "/config/config.php"))->lookup();
+    exit;
+}
+if ($method === "GET" && $path === "/api/semantic-tags/tree") {
+    (new SemanticTagsController($root . "/config/config.php"))->browseTree();
     exit;
 }
 if ($method === "GET" && preg_match("#^/api/semantic-tags/(\\d+)$#", $path, $m)) {
@@ -422,6 +430,10 @@ if ($method === "POST" && $path === "/api/admin/semantic-tags/unassign") {
 }
 if ($method === "PUT" && preg_match("#^/api/admin/semantic-tags/(\\d+)$#", $path, $m)) {
     (new SemanticTagsController($root . "/config/config.php"))->update((int)$m[1]);
+    exit;
+}
+if ($method === "DELETE" && preg_match("#^/api/admin/semantic-tags/(\\d+)$#", $path, $m)) {
+    (new SemanticTagsController($root . "/config/config.php"))->delete((int)$m[1]);
     exit;
 }
 if ($method === "POST" && $path === "/api/tags/prefs") {
