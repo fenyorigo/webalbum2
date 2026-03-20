@@ -3,7 +3,7 @@
     <nav class="top">
       <div class="brand">
         {{ $t("app.brand", "Family memories") }}
-        <span class="version">v3.0.1</span>
+        <span class="version">v3.1.0</span>
       </div>
       <div class="links" v-if="currentUser">
         <router-link to="/" class="link" active-class="active" exact-active-class="active">{{ $t("nav.search", "Search") }}</router-link>
