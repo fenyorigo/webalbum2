@@ -4,8 +4,12 @@
       <aside class="folders-sidebar">
         <folder-tree
           :selected-rel-path="selectedFolder ? selectedFolder.rel_path : ''"
+          :can-create="isAdmin"
+          :can-delete="isAdmin"
           @select="selectFolder"
           @clear="clearFolderFilter"
+          @created="onFolderCreated"
+          @deleted="onFolderDeleted"
         />
       </aside>
       <div class="search-main">
@@ -275,6 +279,22 @@
         >
           {{ $t("semantic_tags.assign", "Assign typed tag") }} ({{ selectedIds.length || total || 0 }})
         </button>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || selectedIds.length === 0"
+          @click="openBatchMoveModal('selected')"
+        >
+          {{ $t("batch_move.move_selected", "Move selected") }} ({{ selectedIds.length }})
+        </button>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || !(Number(total || 0) > 0)"
+          @click="openBatchMoveModal('all_results')"
+        >
+          {{ $t("batch_move.move_all", "Move all results") }} ({{ total || 0 }})
+        </button>
         <span class="note">{{ $t("search.download_limit_note", "Max 20 files per ZIP") }}</span>
         <button
           v-if="selectedIds.length"
@@ -346,6 +366,22 @@
         >
           {{ $t("semantic_tags.assign", "Assign typed tag") }} ({{ selectedIds.length || total || 0 }})
         </button>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || selectedIds.length === 0"
+          @click="openBatchMoveModal('selected')"
+        >
+          {{ $t("batch_move.move_selected", "Move selected") }} ({{ selectedIds.length }})
+        </button>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || !(Number(total || 0) > 0)"
+          @click="openBatchMoveModal('all_results')"
+        >
+          {{ $t("batch_move.move_all", "Move all results") }} ({{ total || 0 }})
+        </button>
         <span class="note">Max 20 files per ZIP</span>
         <button
           v-if="selectedIds.length"
@@ -391,6 +427,22 @@
         >
           {{ $t("semantic_tags.assign", "Assign typed tag") }} ({{ selectedIds.length || total || 0 }})
         </button>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || selectedIds.length === 0"
+          @click="openBatchMoveModal('selected')"
+        >
+          {{ $t("batch_move.move_selected", "Move selected") }} ({{ selectedIds.length }})
+        </button>
+        <button
+          v-if="isAdmin"
+          class="inline"
+          :disabled="loading || !(Number(total || 0) > 0)"
+          @click="openBatchMoveModal('all_results')"
+        >
+          {{ $t("batch_move.move_all", "Move all results") }} ({{ total || 0 }})
+        </button>
         <span class="note">{{ $t("search.download_limit_note", "Max 20 files per ZIP") }}</span>
       </div>
       <pre v-if="debugInfo" class="debug">{{ debugInfo }}</pre>
@@ -407,6 +459,7 @@
       :slideshow-seconds="slideshowSeconds"
       @close="closeViewer"
       @trashed="onItemTrashed"
+      @moved="onItemMoved"
       @open-asset="openAssetFromImageViewer"
       @open-video="openVideoFromImageViewer"
       @open-object="openObjectPage"
@@ -426,6 +479,7 @@
       :slideshow-seconds="slideshowSeconds"
       @close="closeVideoViewer"
       @trashed="onItemTrashed"
+      @moved="onItemMoved"
       @open-asset="openAssetFromVideoViewer"
       @open-image="openImageFromVideoViewer"
       @open-object="openObjectPage"
@@ -728,6 +782,16 @@
       @close="semanticAssignCreateOpen = false"
       @created="onSemanticAssignCreated"
     />
+    <batch-move-modal
+      :is-open="batchMoveOpen"
+      :saving="batchMoveSubmitting"
+      :error="batchMoveError"
+      :scope-label="batchMoveScopeLabel"
+      :item-count="batchMoveItemCount"
+      :summary="batchMoveSummary"
+      @close="closeBatchMoveModal"
+      @confirm="submitBatchMove"
+    />
     <div v-if="replaceOpen" class="modal-backdrop" @click.self="closeReplaceModal">
       <div class="modal">
         <h3>{{ $t("search.replace_saved_title", "Replace saved search?") }}</h3>
@@ -832,11 +896,12 @@ import ImageViewer from "../components/ImageViewer.vue";
 import VideoViewer from "../components/VideoViewer.vue";
 import FolderTree from "../components/FolderTree.vue";
 import SemanticTagCreateModal from "../components/SemanticTagCreateModal.vue";
+import BatchMoveModal from "../components/BatchMoveModal.vue";
 import { apiErrorMessage } from "../api-errors";
 
 export default {
   name: "SearchPage",
-  components: { ResultsGrid, ResultsList, ImageViewer, VideoViewer, FolderTree, SemanticTagCreateModal },
+  components: { ResultsGrid, ResultsList, ImageViewer, VideoViewer, FolderTree, SemanticTagCreateModal, BatchMoveModal },
   data() {
     return {
       loading: false,
@@ -916,6 +981,12 @@ export default {
       batchTagSummary: null,
       batchTagPreviewHidden: false,
       batchSemanticTagCreateOpen: false,
+      batchMoveOpen: false,
+      batchMoveSubmitting: false,
+      batchMoveError: "",
+      batchMoveScope: "selected",
+      batchMoveItemCount: 0,
+      batchMoveSummary: null,
       semanticAssignOpen: false,
       semanticAssignLoading: false,
       semanticAssignSubmitting: false,
@@ -1589,6 +1660,18 @@ export default {
       this.page = 1;
       this.runSearch();
     },
+    onFolderCreated(folder) {
+      if (!folder || !folder.rel_path) {
+        return;
+      }
+      this.showToast(this.$t("folders.create.success", "Folder created"));
+    },
+    onFolderDeleted(folder) {
+      if (!folder || !folder.rel_path) {
+        return;
+      }
+      this.showToast(this.$t("folders.delete.success", "Folder deleted"));
+    },
     searchStateStorageKey(user = this.currentUser) {
       const id = Number(user && user.id ? user.id : 0);
       return id > 0 ? `wa_search_state:${id}` : "";
@@ -2043,6 +2126,39 @@ export default {
         this.batchTagLoading = false;
       }
     },
+    openBatchMoveModal(scope) {
+      if (!this.isAdmin) {
+        return;
+      }
+      const normalizedScope = scope === "all_results" ? "all_results" : "selected";
+      const scopeCount = normalizedScope === "all_results" ? Number(this.total || 0) : this.selectedIds.length;
+      if (scope === "selected" && this.selectedIds.length === 0) {
+        this.showToast(this.$t("batch_move.select_items_first", "Select items first"));
+        return;
+      }
+      if (scope === "all_results" && !(Number(this.total || 0) > 0)) {
+        this.showToast(this.$t("batch_move.select_or_search_first", "Select items or run a search first"));
+        return;
+      }
+      if (scopeCount > this.batchMoveMax) {
+        this.showToast(this.$t("batch_move.limit_exceeded", { count: this.batchMoveMax }, "Batch move is limited to {count} items per run"));
+        return;
+      }
+      this.batchMoveScope = normalizedScope;
+      this.batchMoveItemCount = scopeCount;
+      this.batchMoveOpen = true;
+      this.batchMoveSubmitting = false;
+      this.batchMoveError = "";
+      this.batchMoveSummary = null;
+    },
+    closeBatchMoveModal() {
+      this.batchMoveOpen = false;
+      this.batchMoveSubmitting = false;
+      this.batchMoveError = "";
+      this.batchMoveSummary = null;
+      this.batchMoveScope = "selected";
+      this.batchMoveItemCount = 0;
+    },
     closeBatchTagModal() {
       this.batchTagOpen = false;
       this.batchTagLoading = false;
@@ -2373,6 +2489,101 @@ export default {
         this.batchTagError = this.$t("search.batch_submit_failed", "Failed to queue batch tag edit");
       } finally {
         this.batchTagSubmitting = false;
+      }
+    },
+    orderedSelectedIds() {
+      const selected = new Set(this.selectedIds.map((value) => Number(value)));
+      return this.results
+        .filter((row) => selected.has(Number(row && row.id ? row.id : 0)))
+        .map((row) => Number(row.id));
+    },
+    async resolveBatchMoveIds() {
+      if (this.batchMoveScope === "selected") {
+        return this.orderedSelectedIds();
+      }
+      const total = Number(this.total || 0);
+      if (total <= 0) {
+        return [];
+      }
+      if (total > this.batchMoveMax) {
+        throw new Error(this.$t("batch_move.limit_exceeded", { count: this.batchMoveMax }, "Batch move is limited to {count} items per run"));
+      }
+      const query = this.buildAllResultsQuery();
+      if (!query) {
+        throw new Error(this.$t("batch_move.resolve_failed", "Failed to resolve batch move scope"));
+      }
+      const res = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(query)
+      });
+      if (this.handleAuthError(res)) {
+        throw new Error("");
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(apiErrorMessage(data.error, "batch_move.resolve_failed", "Failed to resolve batch move scope"));
+      }
+      return Array.isArray(data.items) ? data.items.map((item) => Number(item.id || 0)).filter((id) => id !== 0) : [];
+    },
+    async submitBatchMove({ targetRelPath }) {
+      if (this.batchMoveSubmitting) {
+        return;
+      }
+      this.batchMoveSubmitting = true;
+      this.batchMoveError = "";
+      this.batchMoveSummary = null;
+      try {
+        const ids = await this.resolveBatchMoveIds();
+        if (!ids.length) {
+          this.batchMoveError = this.$t("batch_move.no_items", "No items to move");
+          return;
+        }
+        this.batchMoveItemCount = ids.length;
+        const res = await fetch("/api/admin/move/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ids,
+            target_rel_path: targetRelPath
+          })
+        });
+        if (this.handleAuthError(res)) {
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok && res.status !== 207) {
+          this.batchMoveError = apiErrorMessage(data.error, "batch_move.failed", "Batch move failed");
+          return;
+        }
+        this.batchMoveSummary = data;
+        this.selectedIds = [];
+        await this.runSearch();
+        if ((data.blocked_count || 0) > 0 || (data.failed_count || 0) > 0) {
+          this.showToast(this.$t(
+            "batch_move.partial",
+            {
+              moved: Number(data.moved_count || 0) + Number(data.renamed_count || 0),
+              blocked: data.blocked_count || 0,
+              failed: data.failed_count || 0
+            },
+            "Batch move finished with partial success: moved {moved}, blocked {blocked}, failed {failed}."
+          ));
+        } else {
+          this.showToast(this.$t(
+            "batch_move.completed",
+            { moved: Number(data.moved_count || 0) + Number(data.renamed_count || 0) },
+            "Batch move completed: {moved} items moved."
+          ));
+        }
+      } catch (err) {
+        if (err && err.message) {
+          this.batchMoveError = err.message;
+        } else if (!this.batchMoveError) {
+          this.batchMoveError = this.$t("batch_move.failed", "Batch move failed");
+        }
+      } finally {
+        this.batchMoveSubmitting = false;
       }
     },
     async runSearch(resetPage = false) {
@@ -2873,6 +3084,19 @@ This is reversible from Admin -> Trash.`);
       this.selectedIds = [];
       await this.runSearch();
     },
+    async onItemMoved(payload) {
+      this.stopSlideshow();
+      this.viewerOpen = false;
+      this.videoViewerOpen = false;
+      this.assetViewerOpen = false;
+      this.showToast(
+        payload && payload.undo
+          ? (payload.renamedDueToCollision ? this.$t("move.undo_completed_renamed") : this.$t("move.undo_completed"))
+          : (payload && payload.renamedDueToCollision ? this.$t("move.completed_renamed") : this.$t("move.success_remapped"))
+      );
+      this.selectedIds = [];
+      await this.runSearch();
+    },
     onMediaRotated(payload) {
       const id = Number(payload && payload.id ? payload.id : 0);
       if (!id) {
@@ -3094,6 +3318,19 @@ This is reversible from Admin -> Trash.`);
     },
     batchTagOpenDisabled() {
       return this.selectedIds.length === 0 && !(Number(this.total || 0) > 0);
+    },
+    batchMoveScopeLabel() {
+      return this.batchMoveScope === "all_results"
+        ? this.$t("batch_move.scope_all_results", "All search results")
+        : this.$t("batch_move.scope_selected", "Selected items");
+    },
+    batchMoveScopeCount() {
+      return this.batchMoveScope === "all_results"
+        ? Number(this.total || 0)
+        : this.selectedIds.length;
+    },
+    batchMoveMax() {
+      return 500;
     }
   }
 };

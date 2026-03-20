@@ -11,7 +11,7 @@ use WebAlbum\UserContext;
 
 final class HealthController
 {
-    private const VERSION = "webalbum 3.0.1";
+    private const VERSION = "webalbum 3.1.0";
 
     private string $configPath;
 
@@ -52,6 +52,9 @@ final class HealthController
                 "videos_count" => $videos,
                 "tools" => $tools["tools"],
                 "tools_checked_at" => $tools["checked_at"] ?? null,
+                "runtime" => [
+                    "os_family" => PHP_OS_FAMILY,
+                ],
             ]);
         } catch (\Throwable $e) {
             $this->json(["status" => "error", "error" => $e->getMessage()], 500);
@@ -73,6 +76,9 @@ final class HealthController
                 "tools" => $tools["tools"] ?? [],
                 "tools_checked_at" => $tools["checked_at"] ?? null,
                 "overrides" => $tools["overrides"] ?? [],
+                "runtime" => [
+                    "os_family" => PHP_OS_FAMILY,
+                ],
             ]);
         } catch (\Throwable $e) {
             $this->json(["error" => $e->getMessage()], 500);
@@ -95,7 +101,7 @@ final class HealthController
             }
 
             $updates = [];
-            foreach (["exiftool", "ffmpeg", "ffprobe", "soffice", "gs", "imagemagick", "pecl"] as $tool) {
+            foreach (["exiftool", "ffmpeg", "ffprobe", "soffice", "gs", "imagemagick", "pecl", "python3"] as $tool) {
                 if (!array_key_exists($tool, $payload)) {
                     continue;
                 }
@@ -120,6 +126,9 @@ final class HealthController
                 "tools" => $tools["tools"] ?? [],
                 "tools_checked_at" => $tools["checked_at"] ?? null,
                 "overrides" => $tools["overrides"] ?? [],
+                "runtime" => [
+                    "os_family" => PHP_OS_FAMILY,
+                ],
             ]);
         } catch (\Throwable $e) {
             $this->json(["error" => $e->getMessage()], 500);
@@ -142,6 +151,9 @@ final class HealthController
                 "tools" => $tools["tools"],
                 "tools_checked_at" => $tools["checked_at"] ?? null,
                 "overrides" => $tools["overrides"] ?? [],
+                "runtime" => [
+                    "os_family" => PHP_OS_FAMILY,
+                ],
             ]);
         } catch (\Throwable $e) {
             $this->json(["error" => $e->getMessage()], 500);

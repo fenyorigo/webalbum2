@@ -130,6 +130,24 @@
             <td>{{ displayStatus(row, "preview") }}</td>
             <td>{{ displayOverallStatus(row) }}</td>
             <td class="actions-col">
+              <button
+                v-if="canMoveAsset(row)"
+                class="inline"
+                type="button"
+                @click="openMoveModal(row)"
+                :disabled="loading"
+              >
+                {{ $t("asset_move.action") }}
+              </button>
+              <button
+                v-if="canUndoAsset(row)"
+                class="inline"
+                type="button"
+                @click="undoAssetMove(row)"
+                :disabled="loading || undoSavingIds.includes(Number(row.id))"
+              >
+                {{ $t("asset_move.undo_action") }}
+              </button>
               <button class="inline" type="button" @click="requeue(row, 'thumb')" :disabled="loading">{{ $t("assets.requeue_thumb", "Requeue thumb") }}</button>
               <button
                 v-if="canRequeuePreview(row)"
@@ -153,14 +171,25 @@
     </section>
 
     <div v-if="toast" class="toast">{{ toast }}</div>
+    <move-media-modal
+      :is-open="moveOpen"
+      :current-rel-path="moveItem ? moveItem.rel_path : ''"
+      :current-name="moveItem ? fileName(moveItem.rel_path) : ''"
+      :saving="moveSaving"
+      i18n-prefix="asset_move"
+      @close="closeMoveModal"
+      @confirm="confirmMove"
+    />
   </div>
 </template>
 
 <script>
 import { apiErrorMessage } from "../api-errors";
+import MoveMediaModal from "../components/MoveMediaModal.vue";
 
 export default {
   name: "AssetsPage",
+  components: { MoveMediaModal },
   data() {
     return {
       loading: false,
@@ -187,7 +216,12 @@ export default {
       autoRefreshMs: 15000,
       refreshTimer: null,
       statusTab: "pending",
-      clearedIds: []
+      clearedIds: [],
+      moveOpen: false,
+      moveSaving: false,
+      moveItem: null,
+      undoEligibilityById: {},
+      undoSavingIds: []
     };
   },
   mounted() {
@@ -264,7 +298,31 @@ export default {
       this.pageSize = Number(data.page_size || this.pageSize);
       this.sortField = String(data.sort_field || this.sortField);
       this.sortDir = String(data.sort_dir || this.sortDir);
+      await this.refreshUndoEligibility();
       this.updateRefreshPolicy();
+    },
+    async refreshUndoEligibility() {
+      const next = {};
+      const rows = (this.items || []).filter((row) => this.canMoveAsset(row));
+      await Promise.all(rows.map(async (row) => {
+        const id = Number(row && row.id ? row.id : 0);
+        if (!id) {
+          return;
+        }
+        try {
+          const res = await fetch(`/api/admin/assets/${id}/undo-eligibility`);
+          if (res.status === 401 || res.status === 403) {
+            return;
+          }
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data && data.available) {
+            next[id] = data;
+          }
+        } catch (_e) {
+          // non-blocking
+        }
+      }));
+      this.undoEligibilityById = next;
     },
     async refreshJobs() {
       const res = await fetch("/api/admin/jobs/status");
@@ -424,6 +482,124 @@ export default {
     canRequeuePreview(row) {
       return row.type === "doc" && ["txt", "doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes((row.ext || "").toLowerCase());
     },
+    canMoveAsset(row) {
+      if (!row) {
+        return false;
+      }
+      const type = String(row.type || "").toLowerCase();
+      const ext = String(row.ext || "").toLowerCase();
+      if (type === "audio") {
+        return ["mp3", "m4a", "flac"].includes(ext);
+      }
+      if (type === "doc") {
+        return ["pdf", "txt", "doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes(ext);
+      }
+      return false;
+    },
+    canUndoAsset(row) {
+      const id = Number(row && row.id ? row.id : 0);
+      return !!(id && this.undoEligibilityById[id] && this.undoEligibilityById[id].available);
+    },
+    openMoveModal(row) {
+      if (!this.canMoveAsset(row)) {
+        return;
+      }
+      this.moveItem = row;
+      this.moveOpen = true;
+    },
+    closeMoveModal(force = false) {
+      if (this.moveSaving && !force) {
+        return;
+      }
+      this.moveOpen = false;
+      this.moveItem = null;
+    },
+    async confirmMove({ targetRelPath }) {
+      if (!this.moveItem || !targetRelPath) {
+        return;
+      }
+      this.moveSaving = true;
+      this.error = "";
+      try {
+        const res = await fetch(`/api/admin/assets/${this.moveItem.id}/move`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target_rel_path: targetRelPath })
+        });
+        if (res.status === 401 || res.status === 403) {
+          window.dispatchEvent(new CustomEvent("wa-auth-changed", { detail: null }));
+          this.$router.push("/login");
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.error = apiErrorMessage(data.error, "asset_move.failed", "Failed to move asset");
+          return;
+        }
+        const renamedDueToCollision = !!data.renamed_due_to_collision
+          || (data.desired_new_rel_path && data.new_rel_path && data.desired_new_rel_path !== data.new_rel_path);
+        this.toast = renamedDueToCollision && Array.isArray(data.warnings) && data.warnings.includes("derivative_cleanup_failed")
+          ? this.$t("asset_move.completed_renamed_with_warnings")
+          : renamedDueToCollision
+            ? this.$t("asset_move.completed_renamed")
+            : Array.isArray(data.warnings) && data.warnings.includes("derivative_cleanup_failed")
+              ? this.$t("asset_move.success_with_warnings")
+              : this.$t("asset_move.success");
+        setTimeout(() => (this.toast = ""), 2200);
+        this.closeMoveModal(true);
+        await this.fetchAssets();
+      } catch (_e) {
+        this.error = this.$t("asset_move.failed");
+      } finally {
+        this.moveSaving = false;
+      }
+    },
+    async undoAssetMove(row) {
+      const id = Number(row && row.id ? row.id : 0);
+      const eligibility = id ? this.undoEligibilityById[id] : null;
+      if (!id || !eligibility || !eligibility.available) {
+        return;
+      }
+      const ok = window.confirm(
+        this.$t("asset_move.undo_confirm_message", {
+          current: eligibility.current_rel_path || row.rel_path || "",
+          destination: eligibility.original_rel_path || ""
+        })
+      );
+      if (!ok) {
+        return;
+      }
+      this.undoSavingIds = [...this.undoSavingIds, id];
+      this.error = "";
+      try {
+        const res = await fetch(`/api/admin/assets/${id}/undo`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        if (res.status === 401 || res.status === 403) {
+          window.dispatchEvent(new CustomEvent("wa-auth-changed", { detail: null }));
+          this.$router.push("/login");
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.error = apiErrorMessage(data.error, "api.undo_failed", this.$t("undo.failed"));
+          await this.refreshUndoEligibility();
+          return;
+        }
+        const renamedDueToCollision = !!data.renamed_due_to_collision
+          || (data.desired_new_rel_path && data.new_rel_path && data.desired_new_rel_path !== data.new_rel_path);
+        this.toast = renamedDueToCollision
+          ? this.$t("asset_move.undo_completed_renamed")
+          : this.$t("asset_move.undo_completed");
+        setTimeout(() => (this.toast = ""), 2200);
+        await this.fetchAssets();
+      } catch (_e) {
+        this.error = this.$t("undo.failed");
+      } finally {
+        this.undoSavingIds = this.undoSavingIds.filter((value) => value !== id);
+      }
+    },
     applyFilters() {
       this.page = 1;
       this.fetchAssets();
@@ -460,6 +636,14 @@ export default {
       } catch (_e) {
         return "—";
       }
+    },
+    fileName(path) {
+      const value = String(path || "");
+      if (!value) {
+        return "";
+      }
+      const parts = value.split("/");
+      return parts[parts.length - 1] || value;
     }
   }
 };

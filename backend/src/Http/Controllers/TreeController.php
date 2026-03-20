@@ -6,6 +6,7 @@ namespace WebAlbum\Http\Controllers;
 
 use WebAlbum\Db\Maria;
 use WebAlbum\Db\SqliteIndex;
+use WebAlbum\Assets\AssetPaths;
 use WebAlbum\UserContext;
 
 final class TreeController
@@ -20,18 +21,26 @@ final class TreeController
     public function roots(): void
     {
         try {
-            [$sqlite, $maria] = $this->connections();
+            [$config, $sqlite, $maria] = $this->connections();
             if (!$this->ensureAuth($maria)) {
                 return;
             }
 
+            $photosRoot = (string)($config['photos']['root'] ?? '');
             [$folders, $idsByRel] = $this->folderUniverse($sqlite, $maria);
+            $rootSet = [];
             $roots = [];
             foreach ($folders as $relRaw) {
                 $rel = (string)$relRaw;
                 if (strpos($rel, '/') === false) {
-                    $roots[] = $this->mapNodeFromRel($rel, null, $folders, $idsByRel);
+                    $rootSet[$rel] = true;
                 }
+            }
+            foreach ($this->filesystemChildren($photosRoot, null) as $rel) {
+                $rootSet[$rel] = true;
+            }
+            foreach ($rootSet as $rel => $_) {
+                $roots[] = $this->mapNodeFromRel((string)$rel, null, $folders, $idsByRel, $photosRoot);
             }
             usort($roots, fn (array $a, array $b): int => strcasecmp((string)$a['rel_path'], (string)$b['rel_path']));
             $this->json($roots);
@@ -43,11 +52,12 @@ final class TreeController
     public function children(): void
     {
         try {
-            [$sqlite, $maria] = $this->connections();
+            [$config, $sqlite, $maria] = $this->connections();
             if (!$this->ensureAuth($maria)) {
                 return;
             }
 
+            $photosRoot = (string)($config['photos']['root'] ?? '');
             [$folders, $idsByRel, $relById] = $this->folderUniverse($sqlite, $maria, true);
             $parentRel = trim(str_replace('\\', '/', (string)($_GET['parent_rel_path'] ?? '')), '/');
             if ($parentRel === '') {
@@ -61,11 +71,16 @@ final class TreeController
                 return;
             }
 
-            $children = $this->childRelPaths($parentRel, $folders);
+            $childSet = [];
+            foreach ($this->childRelPaths($parentRel, $folders) as $rel) {
+                $childSet[$rel] = true;
+            }
+            foreach ($this->filesystemChildren($photosRoot, $parentRel) as $rel) {
+                $childSet[$rel] = true;
+            }
             $rows = [];
-            foreach ($children as $relRaw) {
-                $rel = (string)$relRaw;
-                $rows[] = $this->mapNodeFromRel($rel, $parentRel, $folders, $idsByRel);
+            foreach ($childSet as $rel => $_) {
+                $rows[] = $this->mapNodeFromRel((string)$rel, $parentRel, $folders, $idsByRel, $photosRoot);
             }
             usort($rows, fn (array $a, array $b): int => strcasecmp((string)$a['rel_path'], (string)$b['rel_path']));
             $this->json($rows);
@@ -74,7 +89,114 @@ final class TreeController
         }
     }
 
-    private function mapNodeFromRel(string $relPath, ?string $parentRel, array $folders, array $idsByRel): array
+    public function createFolder(): void
+    {
+        try {
+            [$config, $sqlite, $maria] = $this->connections();
+            unset($sqlite);
+            $user = $this->ensureAdmin($maria);
+            if ($user === null) {
+                return;
+            }
+
+            $body = file_get_contents('php://input') ?: '{}';
+            $data = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($data)) {
+                $this->json(['error' => 'Invalid JSON'], 400);
+                return;
+            }
+
+            $parentRel = AssetPaths::normalizeRelPath((string)($data['parent_rel_path'] ?? ''));
+            $folderName = $this->normalizeFolderName((string)($data['folder_name'] ?? ''));
+            if ($parentRel === null) {
+                $this->json(['error' => 'Invalid parent folder'], 400);
+                return;
+            }
+            if ($folderName === null) {
+                $this->json(['error' => 'Invalid folder name'], 400);
+                return;
+            }
+
+            $newRelPath = $parentRel . '/' . $folderName;
+            $photosRoot = (string)($config['photos']['root'] ?? '');
+            $targetPath = AssetPaths::joinInside($photosRoot, $newRelPath);
+            if ($targetPath === null) {
+                $this->json(['error' => 'Invalid folder path'], 400);
+                return;
+            }
+            if (file_exists($targetPath)) {
+                $this->json(['error' => 'Folder already exists'], 409);
+                return;
+            }
+            if (!@mkdir($targetPath, 0775, false) && !is_dir($targetPath)) {
+                $this->json(['error' => 'Failed to create folder'], 500);
+                return;
+            }
+
+            $folderSet = $this->folderUniverse(new SqliteIndex($config['sqlite']['path']), $maria)[0];
+            $node = $this->mapNodeFromRel($newRelPath, $parentRel, $folderSet, [], $photosRoot);
+            $this->json([
+                'ok' => true,
+                'folder' => $node,
+            ], 201);
+        } catch (\JsonException $e) {
+            $this->json(['error' => 'Invalid JSON'], 400);
+        } catch (\Throwable $e) {
+            $this->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function deleteFolder(): void
+    {
+        try {
+            [$config, $sqlite, $maria] = $this->connections();
+            unset($sqlite);
+            $user = $this->ensureAdmin($maria);
+            if ($user === null) {
+                return;
+            }
+
+            $body = file_get_contents('php://input') ?: '{}';
+            $data = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($data)) {
+                $this->json(['error' => 'Invalid JSON'], 400);
+                return;
+            }
+
+            $relPath = AssetPaths::normalizeRelPath((string)($data['rel_path'] ?? ''));
+            if ($relPath === null) {
+                $this->json(['error' => 'Invalid folder path'], 400);
+                return;
+            }
+
+            $photosRoot = (string)($config['photos']['root'] ?? '');
+            $targetPath = AssetPaths::joinInside($photosRoot, $relPath);
+            if ($targetPath === null || !is_dir($targetPath)) {
+                $this->json(['error' => 'Folder not found'], 404);
+                return;
+            }
+
+            if (!$this->canDeleteFolder($targetPath)) {
+                $this->json(['error' => 'Folder is not empty'], 409);
+                return;
+            }
+            if (!$this->deleteFolderTree($targetPath)) {
+                $this->json(['error' => 'Failed to delete folder'], 500);
+                return;
+            }
+
+            $this->json([
+                'ok' => true,
+                'rel_path' => $relPath,
+            ]);
+        } catch (\JsonException $e) {
+            $this->json(['error' => 'Invalid JSON'], 400);
+        } catch (\Throwable $e) {
+            $this->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    private function mapNodeFromRel(string $relPath, ?string $parentRel, array $folders, array $idsByRel, string $photosRoot): array
     {
         $id = $idsByRel[$relPath] ?? null;
         $parentId = null;
@@ -89,7 +211,7 @@ final class TreeController
             'name' => $this->nameFromRelPath($relPath),
             'rel_path' => $relPath,
             'depth' => $this->depthFromRelPath($relPath),
-            'has_children' => $this->hasChildren($relPath, $folders),
+            'has_children' => $this->hasChildren($relPath, $folders, $photosRoot),
         ];
     }
 
@@ -112,7 +234,7 @@ final class TreeController
             $config['mariadb']['user'],
             $config['mariadb']['pass']
         );
-        return [$sqlite, $maria];
+        return [$config, $sqlite, $maria];
     }
 
     private function ensureAuth(Maria $maria): bool
@@ -123,6 +245,20 @@ final class TreeController
             return false;
         }
         return true;
+    }
+
+    private function ensureAdmin(Maria $maria): ?array
+    {
+        $user = UserContext::currentUser($maria);
+        if ($user === null) {
+            $this->json(['error' => 'Not authenticated'], 401);
+            return null;
+        }
+        if ((int)($user['is_admin'] ?? 0) !== 1) {
+            $this->json(['error' => 'Forbidden'], 403);
+            return null;
+        }
+        return $user;
     }
 
     private function json(array $payload, int $status = 200): void
@@ -194,7 +330,7 @@ final class TreeController
         return array_keys($children);
     }
 
-    private function hasChildren(string $relPath, array $folders): bool
+    private function hasChildren(string $relPath, array $folders, string $photosRoot): bool
     {
         $prefix = rtrim($relPath, '/') . '/';
         foreach ($folders as $relRaw) {
@@ -203,7 +339,43 @@ final class TreeController
                 return true;
             }
         }
-        return false;
+        return $this->filesystemChildren($photosRoot, $relPath) !== [];
+    }
+
+    /**
+     * @return string[]
+     */
+    private function filesystemChildren(string $photosRoot, ?string $parentRel): array
+    {
+        $basePath = $parentRel === null || $parentRel === ''
+            ? rtrim($photosRoot, DIRECTORY_SEPARATOR)
+            : AssetPaths::joinInside($photosRoot, $parentRel);
+        if (!is_string($basePath) || $basePath === '' || !is_dir($basePath)) {
+            return [];
+        }
+
+        $children = [];
+        $items = @scandir($basePath);
+        if (!is_array($items)) {
+            return [];
+        }
+        foreach ($items as $name) {
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            $childPath = $basePath . DIRECTORY_SEPARATOR . $name;
+            if (!is_dir($childPath)) {
+                continue;
+            }
+            $rel = $parentRel === null || $parentRel === ''
+                ? $name
+                : ($parentRel . '/' . $name);
+            $normalized = AssetPaths::normalizeRelPath($rel);
+            if ($normalized !== null) {
+                $children[$normalized] = true;
+            }
+        }
+        return array_keys($children);
     }
 
     private function depthFromRelPath(string $relPath): int
@@ -213,5 +385,67 @@ final class TreeController
             return 0;
         }
         return count(explode('/', $trimmed));
+    }
+
+    private function normalizeFolderName(string $raw): ?string
+    {
+        $name = trim($raw);
+        if ($name === '' || $name === '.' || $name === '..') {
+            return null;
+        }
+        if (preg_match('/[\/\\\\:*?"<>|\x00-\x1F]/u', $name)) {
+            return null;
+        }
+        if (str_contains($name, '../') || str_contains($name, '..\\')) {
+            return null;
+        }
+        return $name;
+    }
+
+    private function canDeleteFolder(string $path): bool
+    {
+        $selfName = basename($path);
+        if ($selfName !== '' && str_starts_with($selfName, '.')) {
+            return true;
+        }
+
+        $items = @scandir($path);
+        if (!is_array($items)) {
+            return false;
+        }
+        foreach ($items as $name) {
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            if (str_starts_with($name, '.')) {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private function deleteFolderTree(string $path): bool
+    {
+        $items = @scandir($path);
+        if (!is_array($items)) {
+            return false;
+        }
+        foreach ($items as $name) {
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            $child = $path . DIRECTORY_SEPARATOR . $name;
+            if (is_dir($child)) {
+                if (!$this->deleteFolderTree($child)) {
+                    return false;
+                }
+                continue;
+            }
+            if (!@unlink($child)) {
+                return false;
+            }
+        }
+        return @rmdir($path);
     }
 }

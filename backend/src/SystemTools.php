@@ -8,7 +8,7 @@ final class SystemTools
 {
     private static ?array $memory = null;
 
-    private const BINARY_TOOLS = ['exiftool', 'ffmpeg', 'ffprobe', 'soffice', 'gs', 'imagemagick', 'pecl'];
+    private const BINARY_TOOLS = ['exiftool', 'ffmpeg', 'ffprobe', 'soffice', 'gs', 'imagemagick', 'pecl', 'python3'];
 
     public static function checkExternalTools(array $config, bool $force = false): array
     {
@@ -58,6 +58,14 @@ final class SystemTools
             'path' => $imagickAvailable ? 'php extension' : null,
             'configured' => 'php extension',
             'version' => is_string($imagickVersion) && $imagickVersion !== '' ? $imagickVersion : null,
+        ];
+
+        $gd = self::gdSupportStatus();
+        $status['tools']['gd_ext'] = [
+            'available' => $gd['available'],
+            'path' => $gd['available'] ? 'php extension' : null,
+            'configured' => 'php extension',
+            'version' => $gd['version'],
         ];
 
         $heic = self::imagemagickHeicSupport($status['tools']['imagemagick']['path'] ?? null);
@@ -120,6 +128,7 @@ final class SystemTools
             'gs' => trim((string)($toolsCfg['gs'] ?? 'gs')),
             'imagemagick' => trim((string)($toolsCfg['imagemagick'] ?? 'magick')),
             'pecl' => trim((string)($toolsCfg['pecl'] ?? 'pecl')),
+            'python3' => trim((string)($config['indexer']['python'] ?? 'python3')),
         ];
 
         $overrides = self::readOverrides();
@@ -221,6 +230,7 @@ final class SystemTools
     {
         return match ($tool) {
             'imagemagick' => ['magick', 'convert'],
+            'python3' => ['python3', 'python'],
             default => [$tool],
         };
     }
@@ -344,6 +354,43 @@ final class SystemTools
             }
         }
         return ['available' => $line !== null, 'version' => $line];
+    }
+
+    private static function gdSupportStatus(): array
+    {
+        $available = extension_loaded('gd') && function_exists('gd_info');
+        if (!$available) {
+            return ['available' => false, 'version' => null];
+        }
+
+        $info = gd_info();
+        if (!is_array($info)) {
+            return ['available' => true, 'version' => 'enabled'];
+        }
+
+        $version = trim((string)($info['GD Version'] ?? 'GD enabled'));
+        $caps = [];
+        $map = [
+            'JPEG Support' => 'JPEG',
+            'PNG Support' => 'PNG',
+            'GIF Read Support' => 'GIF-read',
+            'GIF Create Support' => 'GIF-write',
+            'WebP Support' => 'WebP',
+            'AVIF Support' => 'AVIF',
+            'BMP Support' => 'BMP',
+            'XPM Support' => 'XPM',
+        ];
+        foreach ($map as $key => $label) {
+            if (!empty($info[$key])) {
+                $caps[] = $label;
+            }
+        }
+
+        if ($caps === []) {
+            return ['available' => true, 'version' => $version];
+        }
+
+        return ['available' => true, 'version' => $version . '; ' . implode(', ', $caps)];
     }
 
     private static function sofficeRuntimeEnvPrefix(): string

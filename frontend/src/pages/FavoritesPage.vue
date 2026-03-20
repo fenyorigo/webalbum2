@@ -76,6 +76,7 @@
         :current-user="currentUser"
         @close="closeViewer"
         @trashed="onItemTrashed"
+        @moved="onItemMoved"
         @open-object="openObjectPage"
       />
       <video-viewer
@@ -86,6 +87,7 @@
         :current-user="currentUser"
         @close="closeVideoViewer"
         @trashed="onItemTrashed"
+        @moved="onItemMoved"
         @open-object="openObjectPage"
       />
       <div v-if="toast" class="toast">{{ toast }}</div>
@@ -349,6 +351,16 @@ ${this.$t("viewer.trash_reversible", "This is reversible from Admin -> Trash.")}
       this.viewerOpen = false;
       this.videoViewerOpen = false;
       this.showToast(this.$t("search.trash_moved", "Moved to Trash"));
+      await this.fetchFavorites();
+    },
+    async onItemMoved(payload) {
+      this.viewerOpen = false;
+      this.videoViewerOpen = false;
+      this.showToast(
+        payload && payload.undo
+          ? (payload.renamedDueToCollision ? this.$t("move.undo_completed_renamed") : this.$t("move.undo_completed"))
+          : (payload && payload.renamedDueToCollision ? this.$t("move.completed_renamed") : this.$t("move.success_remapped"))
+      );
       await this.fetchFavorites();
     }
   }

@@ -64,6 +64,23 @@
           {{ $t("viewer.edit_tags", "Edit Tags") }}
         </button>
         <button
+          v-if="canMove"
+          class="viewer-btn"
+          @click="openMoveDialog"
+          :aria-label="$t('viewer.move_media')"
+        >
+          {{ $t("viewer.move_media") }}
+        </button>
+        <button
+          v-if="canUndoMove"
+          class="viewer-btn"
+          @click="undoMove"
+          :disabled="undoLoading || undoSaving"
+          :aria-label="$t('viewer.undo_move')"
+        >
+          {{ $t("viewer.undo_move") }}
+        </button>
+        <button
           v-if="canTrash"
           class="viewer-btn danger"
           @click="moveToTrash"
@@ -212,16 +229,25 @@
       @close="semanticCreateOpen = false"
       @created="handleSemanticCreated"
     />
+    <move-media-modal
+      :is-open="moveOpen"
+      :current-rel-path="current ? current.path || '' : ''"
+      :current-name="fileName(current ? current.path || '' : '')"
+      :saving="moveSaving"
+      @close="closeMoveDialog"
+      @confirm="confirmMove"
+    />
   </div>
 </template>
 
 <script>
 import { apiErrorMessage } from "../api-errors";
 import SemanticTagCreateModal from "./SemanticTagCreateModal.vue";
+import MoveMediaModal from "./MoveMediaModal.vue";
 
 export default {
   name: "VideoViewer",
-  components: { SemanticTagCreateModal },
+  components: { SemanticTagCreateModal, MoveMediaModal },
   props: {
     results: { type: Array, required: true },
     startId: { type: Number, required: true },
@@ -238,6 +264,7 @@ export default {
     "open-image",
     "open-object",
     "rotated",
+    "moved",
     "slideshow-start",
     "slideshow-stop",
     "slideshow-seconds-change",
@@ -266,6 +293,11 @@ export default {
       semanticCreateOpen: false,
       toast: "",
       mediaError: "",
+      moveOpen: false,
+      moveSaving: false,
+      undoEligibility: null,
+      undoLoading: false,
+      undoSaving: false,
       pendingQuarterTurns: 0,
       rotateVersion: 0,
       rotateSaving: false
@@ -293,6 +325,12 @@ export default {
     },
     canTrash() {
       return this.canEditTags;
+    },
+    canMove() {
+      return this.canEditTags;
+    },
+    canUndoMove() {
+      return this.canMove && !!(this.undoEligibility && this.undoEligibility.available);
     },
     normalizedEditInput() {
       return this.normalizeTag(this.editInput);
@@ -323,6 +361,7 @@ export default {
           this.loadCurrentVideo();
           this.fetchCurrentTags();
           this.fetchCurrentSemanticTags();
+          this.fetchCurrentUndoEligibility();
           this.focusFirst();
         });
         window.addEventListener("keydown", this.onKeydown);
@@ -330,6 +369,7 @@ export default {
         this.stopPlayback(true);
         this.tagsById = {};
         this.semanticTagsById = {};
+        this.undoEligibility = null;
         this.closeEditor();
         document.body.style.overflow = "";
         window.removeEventListener("keydown", this.onKeydown);
@@ -345,6 +385,7 @@ export default {
         this.loadCurrentVideo();
         this.fetchCurrentTags();
         this.fetchCurrentSemanticTags();
+        this.fetchCurrentUndoEligibility();
       }
     },
     results() {
@@ -354,6 +395,7 @@ export default {
         this.loadCurrentVideo();
         this.fetchCurrentTags();
         this.fetchCurrentSemanticTags();
+        this.fetchCurrentUndoEligibility();
       }
     },
     slideshowActive() {
@@ -583,6 +625,130 @@ export default {
         this.videoSrc = "";
       }
       this.isPlaying = false;
+      this.moveOpen = false;
+      this.moveSaving = false;
+    },
+    openMoveDialog() {
+      if (!this.current || !this.canMove) {
+        return;
+      }
+      this.moveOpen = true;
+      this.toast = "";
+    },
+    closeMoveDialog() {
+      if (this.moveSaving) {
+        return;
+      }
+      this.moveOpen = false;
+    },
+    async confirmMove({ targetRelPath }) {
+      if (!this.current || !this.canMove || !targetRelPath) {
+        return;
+      }
+      this.moveSaving = true;
+      try {
+        const res = await fetch(`/api/admin/media/${this.current.id}/move`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target_rel_path: targetRelPath })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.toast = apiErrorMessage(data.error, "move.failed");
+          return;
+        }
+        const renamedDueToCollision = !!data.renamed_due_to_collision
+          || (data.desired_new_rel_path && data.new_rel_path && data.desired_new_rel_path !== data.new_rel_path);
+        this.$emit("moved", {
+          undo: false,
+          oldId: this.current.id,
+          newId: Number(data.new_id || 0) || null,
+          oldRelPath: data.old_rel_path || this.current.path || "",
+          newRelPath: data.new_rel_path || "",
+          desiredNewRelPath: data.desired_new_rel_path || "",
+          renamedDueToCollision
+        });
+        this.moveOpen = false;
+        this.close();
+      } catch (_e) {
+        this.toast = this.$t("move.failed");
+      } finally {
+        this.moveSaving = false;
+      }
+    },
+    async fetchCurrentUndoEligibility() {
+      if (!this.isOpen || !this.canMove || !this.current || !this.current.id) {
+        this.undoEligibility = null;
+        return;
+      }
+      const mediaId = Number(this.current.id || 0);
+      if (!mediaId) {
+        this.undoEligibility = null;
+        return;
+      }
+      this.undoLoading = true;
+      try {
+        const res = await fetch(`/api/admin/media/${mediaId}/undo-eligibility`);
+        if (res.status === 401 || res.status === 403) {
+          this.undoEligibility = null;
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!this.current || Number(this.current.id || 0) !== mediaId) {
+          return;
+        }
+        this.undoEligibility = res.ok ? data : null;
+      } catch (_e) {
+        this.undoEligibility = null;
+      } finally {
+        if (this.current && Number(this.current.id || 0) === mediaId) {
+          this.undoLoading = false;
+        }
+      }
+    },
+    async undoMove() {
+      if (!this.current || !this.canUndoMove || this.undoSaving) {
+        return;
+      }
+      const eligibility = this.undoEligibility || {};
+      const ok = window.confirm(
+        this.$t("move.undo_confirm_message", {
+          current: eligibility.current_rel_path || this.current.path || "",
+          destination: eligibility.original_rel_path || ""
+        })
+      );
+      if (!ok) {
+        return;
+      }
+      this.undoSaving = true;
+      try {
+        const res = await fetch(`/api/admin/media/${this.current.id}/undo`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.toast = apiErrorMessage(data.error, "api.undo_failed", this.$t("undo.failed"));
+          await this.fetchCurrentUndoEligibility();
+          return;
+        }
+        const renamedDueToCollision = !!data.renamed_due_to_collision
+          || (data.desired_new_rel_path && data.new_rel_path && data.desired_new_rel_path !== data.new_rel_path);
+        this.$emit("moved", {
+          undo: true,
+          oldId: this.current.id,
+          newId: Number(data.new_id || 0) || null,
+          oldRelPath: data.old_rel_path || this.current.path || "",
+          newRelPath: data.new_rel_path || "",
+          desiredNewRelPath: data.desired_new_rel_path || "",
+          renamedDueToCollision
+        });
+        this.close();
+      } catch (_e) {
+        this.toast = this.$t("undo.failed");
+      } finally {
+        this.undoSaving = false;
+      }
     },
     async moveToTrash() {
       if (!this.current || !this.canTrash) {

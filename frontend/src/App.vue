@@ -217,10 +217,22 @@
               <td>{{ toolVersion("pecl") }}</td>
             </tr>
             <tr>
+              <td>python3</td>
+              <td>{{ toolAvailable("python3") ? $t("status.found", "Found") : "Missing" }}</td>
+              <td>{{ toolResolvedPath("python3") }}</td>
+              <td>{{ toolVersion("python3") }}</td>
+            </tr>
+            <tr>
               <td>php-imagick</td>
               <td>{{ toolAvailable("imagick_ext") ? $t("status.found", "Found") : "Missing" }}</td>
               <td>{{ toolResolvedPath("imagick_ext") }}</td>
               <td>{{ toolVersion("imagick_ext") }}</td>
+            </tr>
+            <tr>
+              <td>php-gd</td>
+              <td>{{ toolAvailable("gd_ext") ? $t("status.found", "Found") : "Missing" }}</td>
+              <td>{{ toolResolvedPath("gd_ext") }}</td>
+              <td>{{ toolVersion("gd_ext") }}</td>
             </tr>
             <tr>
               <td>imagemagick-heic</td>
@@ -271,6 +283,15 @@
             pecl full path
             <input v-model.trim="toolForm.pecl" type="text" placeholder="/usr/bin/pecl" />
           </label>
+        </div>
+        <div v-if="!toolAvailable('python3')" class="tool-input">
+          <label>
+            {{ $t("tools.python3_full_path", "python3 full path") }}
+            <input v-model.trim="toolForm.python3" type="text" placeholder="/usr/bin/python3" />
+          </label>
+          <p v-if="showDarwinIndexerPythonHint" class="tool-hint">
+            {{ $t("tools.python3_darwin_warning", "On macOS, python3 alone is not sufficient. If indexer2 runs in a virtual environment, WA_INDEXER2_PYTHON must point to that environment's python.") }}
+          </p>
         </div>
         <div class="modal-actions">
           <button class="inline" @click="saveRequiredTools" :disabled="loading || !hasToolPathInput">{{ $t("misc.save_paths", "Save paths") }}</button>
@@ -630,7 +651,8 @@ export default {
         soffice: "",
         gs: "",
         imagemagick: "",
-        pecl: ""
+        pecl: "",
+        python3: ""
       },
       toolsError: "",
       toolStatusLoaded: false,
@@ -702,10 +724,37 @@ export default {
       if (!tools.imagick_ext || tools.imagick_ext.available !== true) {
         warnings.push("Document thumbnail rendering may fail: PHP imagick extension not loaded");
       }
+      if (!tools.gd_ext || tools.gd_ext.available !== true) {
+        warnings.push(this.$t("tools.gd_missing_warning", "Image processing fallback may be unavailable: PHP GD extension not loaded"));
+      }
       if (!tools.imagemagick_heic || tools.imagemagick_heic.available !== true) {
         warnings.push("HEIC thumbnails may fail: ImageMagick HEIC delegate not available");
       }
+      if (!tools.python3 || tools.python3.available !== true) {
+        warnings.push(this.$t("tools.python3_missing_warning", "Media move/indexer operations disabled: python3 not found on server"));
+      }
+      if (this.showDarwinIndexerPythonWarning) {
+        warnings.push(this.$t("tools.python3_darwin_warning", "On macOS, python3 alone is not sufficient. If indexer2 runs in a virtual environment, WA_INDEXER2_PYTHON must point to that environment's python."));
+      }
       return warnings;
+    },
+    serverOsFamily() {
+      return this.toolStatus && this.toolStatus.runtime && this.toolStatus.runtime.os_family
+        ? String(this.toolStatus.runtime.os_family)
+        : "";
+    },
+    showDarwinIndexerPythonHint() {
+      return this.serverOsFamily === "Darwin";
+    },
+    showDarwinIndexerPythonWarning() {
+      if (this.serverOsFamily !== "Darwin") {
+        return false;
+      }
+      if (!this.toolAvailable("python3")) {
+        return false;
+      }
+      const path = this.toolResolvedPath("python3");
+      return typeof path === "string" && path !== "—" && !path.includes("/indexer2/.venv/bin/python3");
     },
     hasToolPathInput() {
       if (
@@ -715,7 +764,8 @@ export default {
         this.toolAvailable("soffice") &&
         this.toolAvailable("gs") &&
         this.toolAvailable("imagemagick") &&
-        this.toolAvailable("pecl")
+        this.toolAvailable("pecl") &&
+        this.toolAvailable("python3")
       ) {
         return false;
       }
@@ -738,6 +788,9 @@ export default {
         return true;
       }
       if (!this.toolAvailable("pecl") && this.toolForm.pecl) {
+        return true;
+      }
+      if (!this.toolAvailable("python3") && this.toolForm.python3) {
         return true;
       }
       return false;
@@ -936,7 +989,8 @@ export default {
       this.toolStatus = {
         tools: data.tools || {},
         checked_at: data.tools_checked_at || null,
-        overrides: data.overrides || {}
+        overrides: data.overrides || {},
+        runtime: data.runtime || {}
       };
     },
     toolAvailable(name) {
@@ -960,14 +1014,14 @@ export default {
     async openRequiredTools() {
       this.adminOpen = false;
       this.toolsError = "";
-      this.toolForm = { exiftool: "", ffmpeg: "", ffprobe: "", soffice: "", gs: "", imagemagick: "", pecl: "" };
+      this.toolForm = { exiftool: "", ffmpeg: "", ffprobe: "", soffice: "", gs: "", imagemagick: "", pecl: "", python3: "" };
       await this.recheckSystemTools(true);
       this.toolsOpen = true;
     },
     closeRequiredTools() {
       this.toolsOpen = false;
       this.toolsError = "";
-      this.toolForm = { exiftool: "", ffmpeg: "", ffprobe: "", soffice: "", gs: "", imagemagick: "", pecl: "" };
+      this.toolForm = { exiftool: "", ffmpeg: "", ffprobe: "", soffice: "", gs: "", imagemagick: "", pecl: "", python3: "" };
     },
     async saveRequiredTools() {
       if (!this.hasToolPathInput) {
@@ -998,6 +1052,9 @@ export default {
         if (!this.toolAvailable("pecl") && this.toolForm.pecl) {
           payload.pecl = this.toolForm.pecl;
         }
+        if (!this.toolAvailable("python3") && this.toolForm.python3) {
+          payload.python3 = this.toolForm.python3;
+        }
         const res = await fetch("/api/admin/tools/configure", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1014,7 +1071,7 @@ export default {
           return;
         }
         this.applyToolStatus(data);
-        this.toolForm = { exiftool: "", ffmpeg: "", ffprobe: "", soffice: "", gs: "", imagemagick: "", pecl: "" };
+        this.toolForm = { exiftool: "", ffmpeg: "", ffprobe: "", soffice: "", gs: "", imagemagick: "", pecl: "", python3: "" };
       } catch (err) {
         this.toolsError = this.$t("tools.save_failed", "Saving tool paths failed");
       } finally {
@@ -2110,6 +2167,12 @@ body {
 
 .tool-input label {
   min-width: 100%;
+}
+
+.tool-hint {
+  margin: 6px 0 0;
+  color: #6b4b12;
+  font-size: 13px;
 }
 
 

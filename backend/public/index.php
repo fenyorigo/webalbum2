@@ -25,6 +25,9 @@ use WebAlbum\Http\Controllers\FileController;
 use WebAlbum\Http\Controllers\FileTagsController;
 use WebAlbum\Http\Controllers\MediaTagsController;
 use WebAlbum\Http\Controllers\MediaRotateController;
+use WebAlbum\Http\Controllers\MediaMoveController;
+use WebAlbum\Http\Controllers\MoveUndoController;
+use WebAlbum\Http\Controllers\BatchMoveController;
 use WebAlbum\Http\Controllers\VideoController;
 use WebAlbum\Http\Controllers\DownloadController;
 use WebAlbum\Http\Controllers\ThumbController;
@@ -40,6 +43,7 @@ use WebAlbum\Http\Controllers\MaintenanceController;
 use WebAlbum\Http\Controllers\TreeController;
 use WebAlbum\Http\Controllers\AdminAssetsController;
 use WebAlbum\Http\Controllers\AssetController;
+use WebAlbum\Http\Controllers\AssetMoveController;
 use WebAlbum\Http\Controllers\ObjectAdminController;
 use WebAlbum\Http\Controllers\ObjectCollabController;
 use WebAlbum\Http\Controllers\ObjectResolveController;
@@ -68,6 +72,34 @@ session_start();
 
 if ($method === "POST" && preg_match("#^/api/media/(\\d+)/rotate$#", $path, $m)) {
     (new MediaRotateController($root . "/config/config.php"))->save((int)$m[1]);
+    exit;
+}
+if ($method === "POST" && preg_match("#^/api/admin/media/(\\d+)/move$#", $path, $m)) {
+    (new MediaMoveController($root . "/config/config.php"))->move((int)$m[1]);
+    exit;
+}
+if ($method === "GET" && preg_match("#^/api/admin/media/(\\d+)/undo-eligibility$#", $path, $m)) {
+    (new MoveUndoController($root . "/config/config.php"))->mediaEligibility((int)$m[1]);
+    exit;
+}
+if ($method === "POST" && preg_match("#^/api/admin/media/(\\d+)/undo$#", $path, $m)) {
+    (new MoveUndoController($root . "/config/config.php"))->undoMedia((int)$m[1]);
+    exit;
+}
+if ($method === "POST" && preg_match("#^/api/admin/assets/(\\d+)/move$#", $path, $m)) {
+    (new AssetMoveController($root . "/config/config.php"))->move((int)$m[1]);
+    exit;
+}
+if ($method === "GET" && preg_match("#^/api/admin/assets/(\\d+)/undo-eligibility$#", $path, $m)) {
+    (new MoveUndoController($root . "/config/config.php"))->assetEligibility((int)$m[1]);
+    exit;
+}
+if ($method === "POST" && preg_match("#^/api/admin/assets/(\\d+)/undo$#", $path, $m)) {
+    (new MoveUndoController($root . "/config/config.php"))->undoAsset((int)$m[1]);
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/move/batch") {
+    (new BatchMoveController($root . "/config/config.php"))->move();
     exit;
 }
 
@@ -125,6 +157,14 @@ if ($method === "GET" && $path === "/api/tree/roots") {
 }
 if ($method === "GET" && $path === "/api/tree") {
     (new TreeController($root . "/config/config.php"))->children();
+    exit;
+}
+if ($method === "POST" && $path === "/api/admin/tree/folder") {
+    (new TreeController($root . "/config/config.php"))->createFolder();
+    exit;
+}
+if ($method === "DELETE" && $path === "/api/admin/tree/folder") {
+    (new TreeController($root . "/config/config.php"))->deleteFolder();
     exit;
 }
 if ($method === "GET" && $path === "/api/tags") {

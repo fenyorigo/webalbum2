@@ -4,7 +4,7 @@ Backend and frontend for browsing an indexer-produced SQLite database (read-only
 
 ## Release
 
-- Current version: `3.0.1`
+- Current version: `3.1.0`
 - See `CHANGELOG.md` for release notes.
 
 ## Backend
@@ -100,7 +100,7 @@ npm run build
 
 ## Config
 
-Set `WA_SQLITE_DB`, `WA_PHOTOS_ROOT`, `WA_THUMBS_ROOT`, `WA_TRASH_ROOT`, `WA_TRASH_THUMBS_ROOT`, `WA_THUMB_MAX`, `WA_THUMB_QUALITY`, `WA_EXIFTOOL_PATH`, `WA_FFMPEG_BIN`, `WA_FFPROBE_BIN`, `WA_SOFFICE_PATH`, `WA_GS_PATH`, `WA_IMAGEMAGICK_BIN`, `WA_PECL_BIN` or edit `backend/config/config.php`.
+Set `WA_SQLITE_DB`, `WA_PHOTOS_ROOT`, `WA_THUMBS_ROOT`, `WA_TRASH_ROOT`, `WA_TRASH_THUMBS_ROOT`, `WA_THUMB_MAX`, `WA_THUMB_QUALITY`, `WA_EXIFTOOL_PATH`, `WA_FFMPEG_BIN`, `WA_FFPROBE_BIN`, `WA_SOFFICE_PATH`, `WA_GS_PATH`, `WA_IMAGEMAGICK_BIN`, `WA_PECL_BIN`, `WA_INDEXER2_PYTHON` or edit `backend/config/config.php`.
 
 Example:
 
@@ -119,19 +119,24 @@ export WA_SOFFICE_PATH="soffice"
 export WA_GS_PATH="gs"
 export WA_IMAGEMAGICK_BIN="magick"
 export WA_PECL_BIN="pecl"
+export WA_INDEXER2_PYTHON="python3"
 ```
 
 
 ## System tool checks
 
-- On backend startup/first use, Webalbum checks `ffmpeg`, `ffprobe`, `exiftool`, `soffice`, `gs`, `imagemagick`, `pecl`, and `php-imagick` and caches the result in `backend/var/external_tools_status.json` (rechecked on admin login and when opening Required tools).
+- On backend startup/first use, Webalbum checks `ffmpeg`, `ffprobe`, `exiftool`, `soffice`, `gs`, `imagemagick`, `pecl`, `python3`, `php-imagick`, and `php-gd` and caches the result in `backend/var/external_tools_status.json` (rechecked on admin login and when opening Required tools).
 - Tool checks are forced on every successful admin login.
 - Admin can inspect paths + versions + overrides from UI (`Admin ▾` -> `Required tools`) or API: `GET /api/admin/tools/status`.
 - Admin can set manual absolute tool paths via `POST /api/admin/tools/configure` and recheck via `POST /api/admin/tools/recheck`.
 - `soffice` is required for Office/TXT -> PDF conversions.
 - `gs` (Ghostscript) is required for PDF page rendering used by document thumbnails.
 - `imagemagick` + PHP `imagick` extension are required for reliable document thumbnail rendering on server workers.
+- `php-gd` is also checked as a PHP-side image fallback, and the Required tools view shows which formats the current GD build supports.
 - `pecl` is checked for diagnostics/operations visibility; runtime conversion itself does not require `pecl`.
+- `python3` is required for indexer-backed operations such as admin media move.
+- On Fedora/Linux, plain `python3` is usually enough if the indexer dependencies are installed into the system Python.
+- On macOS, plain `python3` may still be wrong even if it exists. If `indexer2` uses its own virtualenv, `WA_INDEXER2_PYTHON` must point to that virtualenv interpreter, for example `/Users/bajanp/Projects/indexer2/.venv/bin/python3.14`.
 
 
 ## Security notes

@@ -390,7 +390,8 @@ function reindexSingleMediaFile(array $config, string $relPath): void
     $sqlitePath = (string)($config['sqlite']['path'] ?? '');
     $photosRoot = (string)($config['photos']['root'] ?? '');
     $indexerRoot = (string)($config['indexer']['root'] ?? '');
-    $python = (string)($config['indexer']['python'] ?? 'python3');
+    $toolValues = SystemTools::getConfiguredToolValues($config);
+    $python = (string)($toolValues['python3'] ?? ($config['indexer']['python'] ?? 'python3'));
     $configPath = trim((string)($config['indexer']['config_path'] ?? ''));
     if ($configPath === '') {
         $configPath = rtrim($indexerRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'config.yaml';
