@@ -76,6 +76,9 @@ final class SystemTools
             'version' => $heic['version'],
         ];
 
+        $status['tools']['libheif_freeworld'] = self::rpmPackageStatus('libheif-freeworld');
+        $status['tools']['libheif_tools'] = self::rpmPackageStatus('libheif-tools');
+
         self::$memory = $status;
         self::writeJson($cachePath, $status);
         return $status;
@@ -354,6 +357,51 @@ final class SystemTools
             }
         }
         return ['available' => $line !== null, 'version' => $line];
+    }
+
+    private static function rpmPackageStatus(string $package): array
+    {
+        $rpm = self::findInPath('rpm');
+        if ($rpm === null) {
+            return [
+                'available' => false,
+                'path' => null,
+                'configured' => 'rpm package',
+                'version' => null,
+                'supported' => false,
+            ];
+        }
+
+        $query = self::runCommand([$rpm, '-q', '--qf', '%{NAME} %{VERSION}-%{RELEASE}', $package]);
+        if (!is_string($query) || $query === '') {
+            return [
+                'available' => false,
+                'path' => $package,
+                'configured' => 'rpm package',
+                'version' => null,
+                'supported' => true,
+            ];
+        }
+
+        $firstLine = trim((string)preg_split('/\R/', $query)[0]);
+        if ($firstLine === '' || str_contains($firstLine, 'is not installed')) {
+            return [
+                'available' => false,
+                'path' => $package,
+                'configured' => 'rpm package',
+                'version' => null,
+                'supported' => true,
+            ];
+        }
+
+        $parts = preg_split('/\s+/', $firstLine, 2);
+        return [
+            'available' => true,
+            'path' => $parts[0] ?? $package,
+            'configured' => 'rpm package',
+            'version' => $parts[1] ?? $firstLine,
+            'supported' => true,
+        ];
     }
 
     private static function gdSupportStatus(): array

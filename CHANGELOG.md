@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Expanded Required tools checks for HEIC troubleshooting by reporting Fedora/RPM package presence for `libheif-freeworld` and `libheif-tools`.
 
 ## 3.0.1 - 2026-03-18
 

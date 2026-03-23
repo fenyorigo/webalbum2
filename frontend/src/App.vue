@@ -240,6 +240,18 @@
               <td>{{ toolResolvedPath("imagemagick_heic") }}</td>
               <td>{{ toolVersion("imagemagick_heic") }}</td>
             </tr>
+            <tr v-if="toolSupported('libheif_freeworld')">
+              <td>libheif-freeworld</td>
+              <td>{{ toolAvailable("libheif_freeworld") ? $t("status.found", "Found") : "Missing" }}</td>
+              <td>{{ toolResolvedPath("libheif_freeworld") }}</td>
+              <td>{{ toolVersion("libheif_freeworld") }}</td>
+            </tr>
+            <tr v-if="toolSupported('libheif_tools')">
+              <td>libheif-tools</td>
+              <td>{{ toolAvailable("libheif_tools") ? $t("status.found", "Found") : "Missing" }}</td>
+              <td>{{ toolResolvedPath("libheif_tools") }}</td>
+              <td>{{ toolVersion("libheif_tools") }}</td>
+            </tr>
           </tbody>
         </table>
         <div v-if="!toolAvailable('exiftool')" class="tool-input">
@@ -730,6 +742,12 @@ export default {
       if (!tools.imagemagick_heic || tools.imagemagick_heic.available !== true) {
         warnings.push("HEIC thumbnails may fail: ImageMagick HEIC delegate not available");
       }
+      if (tools.libheif_freeworld && tools.libheif_freeworld.supported === true && tools.libheif_freeworld.available !== true) {
+        warnings.push("HEIC thumbnails may fail on Fedora/RPM systems: libheif-freeworld is not installed");
+      }
+      if (tools.libheif_tools && tools.libheif_tools.supported === true && tools.libheif_tools.available !== true) {
+        warnings.push("HEIC diagnostics may be limited on Fedora/RPM systems: libheif-tools is not installed");
+      }
       if (!tools.python3 || tools.python3.available !== true) {
         warnings.push(this.$t("tools.python3_missing_warning", "Media move/indexer operations disabled: python3 not found on server"));
       }
@@ -996,6 +1014,10 @@ export default {
     toolAvailable(name) {
       const tools = this.toolStatus && this.toolStatus.tools ? this.toolStatus.tools : {};
       return !!(tools[name] && tools[name].available === true);
+    },
+    toolSupported(name) {
+      const tools = this.toolStatus && this.toolStatus.tools ? this.toolStatus.tools : {};
+      return !!(tools[name] && tools[name].supported !== false);
     },
     toolResolvedPath(name) {
       const tools = this.toolStatus && this.toolStatus.tools ? this.toolStatus.tools : {};
