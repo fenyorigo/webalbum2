@@ -134,6 +134,10 @@ export WA_INDEXER2_PYTHON="python3"
 - `imagemagick` + PHP `imagick` extension are required for reliable document thumbnail rendering on server workers.
 - `php-gd` is also checked as a PHP-side image fallback, and the Required tools view shows which formats the current GD build supports.
 - `pecl` is checked for diagnostics/operations visibility; runtime conversion itself does not require `pecl`.
+- HEIC thumbnail support may require additional platform packages beyond ImageMagick itself.
+- On Fedora/RPM systems, HEIC runtime support may depend on `libheif-freeworld` and `libheif-tools`.
+- On macOS/Homebrew, HEIC runtime support may require `brew install imagemagick libheif`.
+- If PHP `imagick` still cannot read HEIC on macOS after installing Homebrew packages, rebuild/reinstall the `imagick` extension against the current Homebrew ImageMagick.
 - `python3` is required for indexer-backed operations such as admin media move.
 - On Fedora/Linux, plain `python3` is usually enough if the indexer dependencies are installed into the system Python.
 - On macOS, plain `python3` may still be wrong even if it exists. If `indexer2` uses its own virtualenv, `WA_INDEXER2_PYTHON` must point to that virtualenv interpreter, for example `/Users/bajanp/Projects/indexer2/.venv/bin/python3.14`.

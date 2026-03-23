@@ -361,6 +361,16 @@ final class SystemTools
 
     private static function rpmPackageStatus(string $package): array
     {
+        if (PHP_OS_FAMILY !== 'Linux') {
+            return [
+                'available' => false,
+                'path' => null,
+                'configured' => 'rpm package',
+                'version' => null,
+                'supported' => false,
+            ];
+        }
+
         $rpm = self::findInPath('rpm');
         if ($rpm === null) {
             return [
@@ -384,13 +394,25 @@ final class SystemTools
         }
 
         $firstLine = trim((string)preg_split('/\R/', $query)[0]);
-        if ($firstLine === '' || str_contains($firstLine, 'is not installed')) {
+        $firstLineLower = strtolower($firstLine);
+        if (
+            $firstLine === ''
+            || str_contains($firstLineLower, 'is not installed')
+            || str_starts_with($firstLineLower, 'error:')
+            || str_contains($firstLineLower, 'unable to open sqlite database')
+            || str_contains($firstLineLower, 'cannot open packages database')
+            || str_contains($firstLineLower, 'cannot open packages index')
+        ) {
+            $rpmUnavailable = str_starts_with($firstLineLower, 'error:')
+                || str_contains($firstLineLower, 'unable to open sqlite database')
+                || str_contains($firstLineLower, 'cannot open packages database')
+                || str_contains($firstLineLower, 'cannot open packages index');
             return [
                 'available' => false,
                 'path' => $package,
                 'configured' => 'rpm package',
-                'version' => null,
-                'supported' => true,
+                'version' => $rpmUnavailable ? $firstLine : null,
+                'supported' => !$rpmUnavailable,
             ];
         }
 
