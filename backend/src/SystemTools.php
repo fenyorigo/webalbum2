@@ -368,6 +368,7 @@ final class SystemTools
                 'configured' => 'rpm package',
                 'version' => null,
                 'supported' => false,
+                'readable' => false,
             ];
         }
 
@@ -379,6 +380,7 @@ final class SystemTools
                 'configured' => 'rpm package',
                 'version' => null,
                 'supported' => false,
+                'readable' => false,
             ];
         }
 
@@ -390,6 +392,7 @@ final class SystemTools
                 'configured' => 'rpm package',
                 'version' => null,
                 'supported' => true,
+                'readable' => true,
             ];
         }
 
@@ -412,7 +415,8 @@ final class SystemTools
                 'path' => $package,
                 'configured' => 'rpm package',
                 'version' => $rpmUnavailable ? $firstLine : null,
-                'supported' => !$rpmUnavailable,
+                'supported' => true,
+                'readable' => !$rpmUnavailable,
             ];
         }
 
@@ -423,6 +427,7 @@ final class SystemTools
             'configured' => 'rpm package',
             'version' => $parts[1] ?? $firstLine,
             'supported' => true,
+            'readable' => true,
         ];
     }
 
