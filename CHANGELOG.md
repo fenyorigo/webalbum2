@@ -3,6 +3,13 @@
 ## Unreleased
 - Expanded Required tools checks for HEIC troubleshooting by reporting Fedora/RPM package presence for `libheif-freeworld` and `libheif-tools`.
 
+## 3.1.1 - 2026-05-04
+
+- Added a fuller normal-user manual in `docs/felhasznaloi-kezikonyv.md`.
+- Replaced the in-app Help page with the expanded user guide content.
+- Localized the Help page so it follows the profile UI language setting (Hungarian/English).
+- Added localization seed/update SQL for the expanded Help content.
+
 ## 3.0.1 - 2026-03-18
 
 - Added a localized Help page with main navigation entry and `/help` route.
