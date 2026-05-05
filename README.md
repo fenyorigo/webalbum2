@@ -4,7 +4,7 @@ Backend and frontend for browsing an indexer-produced SQLite database (read-only
 
 ## Release
 
-- Current version: `3.1.1`
+- Current version: `3.1.2`
 - See `CHANGELOG.md` for release notes.
 
 ## Backend

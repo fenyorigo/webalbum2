@@ -3,6 +3,12 @@
 ## Unreleased
 - Expanded Required tools checks for HEIC troubleshooting by reporting Fedora/RPM package presence for `libheif-freeworld` and `libheif-tools`.
 
+## 3.1.2 - 2026-05-05
+
+- Fixed mixed Hungarian/English text on the in-app Help page when Hungarian is the preferred UI language.
+- Added a follow-up SQL migration to normalize existing Hungarian Help translations in already migrated databases.
+- Bumped the release version to `3.1.2`.
+
 ## 3.1.1 - 2026-05-04
 
 - Added a fuller normal-user manual in `docs/felhasznaloi-kezikonyv.md`.
