@@ -3,7 +3,7 @@
     <nav class="top">
       <div class="brand">
         {{ $t("app.brand", "Family memories") }}
-        <span class="version">v3.1.1</span>
+        <span class="version">v{{ appVersion }}</span>
       </div>
       <div class="links" v-if="currentUser">
         <router-link to="/" class="link" active-class="active" exact-active-class="active">{{ $t("nav.search", "Search") }}</router-link>
@@ -597,10 +597,13 @@
 import { applyI18nBundle } from "./i18n";
 import { apiErrorMessage } from "./api-errors";
 
+const appVersion = __APP_VERSION__;
+
 export default {
   name: "App",
   data() {
     return {
+      appVersion,
       currentUser: null,
       prefs: null,
       adminOpen: false,
